@@ -76,10 +76,16 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Check Date</TableHead>
+                  <TableHead>Check #</TableHead>
                   <TableHead>Patient</TableHead>
-                  <TableHead>Service Date</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>DOS</TableHead>
+                  <TableHead>Billed</TableHead>
+                  <TableHead>Paid</TableHead>
+                  <TableHead>Patient Pay</TableHead>
+                  <TableHead>Adjustment</TableHead>
+                  <TableHead>Payment Status</TableHead>
+                  <TableHead>Posting Status</TableHead>
                   <TableHead>
                     <span className="sr-only">Actions</span>
                   </TableHead>
@@ -89,14 +95,20 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
                 {filteredClaims.length > 0 ? (
                   filteredClaims.map((claim) => (
                     <TableRow key={claim.id}>
+                      <TableCell>{new Date(claim.checkDate).toLocaleDateString()}</TableCell>
+                      <TableCell>{claim.checkNumber}</TableCell>
                       <TableCell className="font-medium">{claim.patientName}</TableCell>
                       <TableCell>{new Date(claim.serviceDate).toLocaleDateString()}</TableCell>
                       <TableCell>${claim.amount.toFixed(2)}</TableCell>
+                      <TableCell>${claim.paid.toFixed(2)}</TableCell>
+                      <TableCell>${claim.patientPay.toFixed(2)}</TableCell>
+                      <TableCell>${claim.adjustment.toFixed(2)}</TableCell>
                       <TableCell>
-                        <Badge variant={claim.statementSent ? "secondary" : "default"} className={!claim.statementSent ? 'bg-accent text-accent-foreground' : ''}>
-                          {claim.statementSent ? "Sent" : "Needed"}
+                        <Badge variant={claim.paymentStatus === 'PAID' ? "secondary" : "destructive"}>
+                          {claim.paymentStatus}
                         </Badge>
                       </TableCell>
+                      <TableCell>{claim.postingStatus}</TableCell>
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -120,7 +132,7 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
+                    <TableCell colSpan={11} className="h-24 text-center">
                       No claims found for this filter.
                     </TableCell>
                   </TableRow>
