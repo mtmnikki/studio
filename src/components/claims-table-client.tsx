@@ -41,6 +41,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Claim } from "@/lib/types";
 import { useClaims } from "@/hooks/use-claims";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { formatCurrency } from "@/lib/utils";
 
 const noteOptions = [
     "We will not receive payment",
@@ -77,20 +78,41 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
   const [filter, setFilter] = React.useState<"all" | "needed" | "sent">("all");
   const [selectedClaimIds, setSelectedClaimIds] = React.useState<string[]>([]);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
-  
+  const [searchTerm, setSearchTerm] = React.useState("");
+
   const filteredClaims = React.useMemo(() => {
-    const claimsToFilter = claims;
-    if (!claimsToFilter) return [];
-    switch (filter) {
-      case 'needed':
-        return claimsToFilter.filter(c => !c.statementSent && c.patientPay > 0);
-      case 'sent':
-        return claimsToFilter.filter(c => c.statementSent);
-      case 'all':
-      default:
-        return claimsToFilter;
+    if (!claims) return [];
+
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    let working = claims;
+    if (filter === "needed") {
+      working = working.filter((c) => !c.statementSent && (c.patientPay ?? 0) > 0);
+    } else if (filter === "sent") {
+      working = working.filter((c) => c.statementSent);
     }
-  }, [claims, filter]);
+
+    if (!normalizedSearch) {
+      return working;
+    }
+
+    return working.filter((claim) => {
+      const haystack = [
+        claim.patientName,
+        claim.payee,
+        claim.payer,
+        claim.serviceDescription,
+        claim.productId,
+        claim.checkNumber,
+        claim.rx,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(normalizedSearch);
+    });
+  }, [claims, filter, searchTerm]);
 
   React.useEffect(() => {
     setSelectedClaimIds([]);
@@ -271,8 +293,8 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
         </Select>
       )
     }
-     if (typeof cellValue === 'number' && ['amount', 'paid', 'adjustment', 'patientPay'].includes(field)) {
-      return `$${cellValue.toFixed(2)}`;
+    if (typeof cellValue === 'number' && ['amount', 'paid', 'adjustment', 'patientPay'].includes(field)) {
+      return formatCurrency(cellValue);
     }
     if ((field.toLowerCase().includes('date') || field === 'serviceDate') && cellValue) {
         return formatDate(cellValue as string);
@@ -284,20 +306,25 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
 
   return (
     <Tabs defaultValue="all" onValueChange={(value) => setFilter(value as any)}>
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <TabsList className="flex w-full flex-wrap justify-start gap-2 rounded-2xl bg-white/70 p-1 text-xs font-semibold text-slate-600 shadow-inner backdrop-blur md:w-auto">
+      <div className="flex items-center gap-4">
+        <TabsList>
           <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="needed">Statement Needed</TabsTrigger>
           <TabsTrigger value="sent">Statement Sent</TabsTrigger>
         </TabsList>
         {numSelected > 0 && (
-          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/60 bg-white/60 px-4 py-2 shadow">
-            <span className="text-sm font-semibold text-slate-600">{numSelected} selected</span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">{numSelected} selected</span>
             <Button variant="outline" size="sm" onClick={handleGenerateStatements}>
               <FileText className="mr-2 h-4 w-4" />
               Generate Statements
             </Button>
-            <Button variant="destructive" size="sm" onClick={() => setIsDeleteDialogOpen(true)}>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setIsDeleteDialogOpen(true)}
+              className="rounded-full px-4"
+            >
               <Trash2 className="mr-2 h-4 w-4" />
               Delete ({numSelected})
             </Button>
@@ -305,17 +332,12 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
         )}
       </div>
       <TabsContent value={filter}>
-        <Card className="border-white/50 bg-white/60">
+        <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-3 text-2xl font-semibold text-slate-900">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-500 via-sky-500 to-teal-400 p-2 text-white shadow">
-                <FileText className="h-full w-full" />
-              </div>
-              Claims workspace
-            </CardTitle>
+            <CardTitle>Claims</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="relative">
+            <div className="relative overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -357,7 +379,7 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
                 <TableBody>
                   {filteredClaims.length > 0 ? (
                     filteredClaims.map((claim) => (
-                      <TableRow key={claim.id} data-state={selectedClaimIds.includes(claim.id) ? "selected" : ""} className="bg-white/60">
+                      <TableRow key={claim.id} data-state={selectedClaimIds.includes(claim.id) ? "selected" : ""}>
                          <TableCell>
                           <Checkbox
                             checked={selectedClaimIds.includes(claim.id)}
@@ -376,10 +398,10 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
                         <TableCell className="font-medium whitespace-nowrap">{claim.patientName}</TableCell>
                         <TableCell className="whitespace-nowrap">{claim.serviceDescription}</TableCell>
                         <TableCell className="whitespace-nowrap">{claim.productId}</TableCell>
-                        <TableCell className="whitespace-nowrap text-right">${claim.amount.toFixed(2)}</TableCell>
-                        <TableCell className="whitespace-nowrap text-right">${claim.paid.toFixed(2)}</TableCell>
-                        <TableCell className="whitespace-nowrap text-right">${claim.adjustment.toFixed(2)}</TableCell>
-                        <TableCell className="whitespace-nowrap text-right">${claim.patientPay.toFixed(2)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-right">{formatCurrency(claim.amount)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-right">{formatCurrency(claim.paid)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-right">{formatCurrency(claim.adjustment)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-right">{formatCurrency(claim.patientPay)}</TableCell>
                         <TableCell className="whitespace-nowrap">{renderCell(claim, 'paymentStatus')}</TableCell>
                         <TableCell className="whitespace-nowrap">{renderCell(claim, 'postingStatus')}</TableCell>
                         <TableCell className="whitespace-nowrap">{renderCell(claim, 'workflow')}</TableCell>
@@ -403,29 +425,12 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                  {claim.patientId ? (
-                                    <DropdownMenuItem asChild>
-                                      <Link href={`/statement/${claim.id}`}>
-                                        <FileText className="mr-2 h-4 w-4" />
-                                        Generate Statement
-                                      </Link>
-                                    </DropdownMenuItem>
-                                  ) : (
-                                    <DropdownMenuItem
-                                      onSelect={(event) => {
-                                        event.preventDefault();
-                                        toast({
-                                          title: "Patient not linked",
-                                          description:
-                                            "Assign a patient to this claim to build a statement.",
-                                          variant: "destructive",
-                                        });
-                                      }}
-                                    >
+                                  <DropdownMenuItem asChild>
+                                    <Link href={`/statement/${claim.id}`}>
                                       <FileText className="mr-2 h-4 w-4" />
-                                      Link patient to generate
-                                    </DropdownMenuItem>
-                                  )}
+                                      Generate Statement
+                                    </Link>
+                                  </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </div>
@@ -442,10 +447,11 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
                 </TableBody>
               </Table>
             </div>
-          </CardContent>
+            </CardContent>
+          </div>
         </Card>
       </TabsContent>
-       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>

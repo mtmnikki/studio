@@ -74,3 +74,32 @@ export interface Claim {
   statementSentAt?: string | null;
   statementSent2ndAt?: string | null;
 }
+
+export interface Pharmacy {
+  id: string;
+  name: string;
+  npi?: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
+  status?: "Active" | "Paused" | "Prospect";
+  services?: string[];
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+  };
+  notes?: string;
+  lastSyncAt?: string | null;
+}
+
+export interface JennNote {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+  tags?: string[];
+  mood?: "celebrate" | "todo" | "follow-up" | "idea";
+}
