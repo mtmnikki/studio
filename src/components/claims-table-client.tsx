@@ -41,6 +41,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Claim } from "@/lib/types";
 import { useClaims } from "@/hooks/use-claims";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { formatCurrency } from "@/lib/utils";
 
 const noteOptions = [
     "We will not receive payment",
@@ -77,20 +78,41 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
   const [filter, setFilter] = React.useState<"all" | "needed" | "sent">("all");
   const [selectedClaimIds, setSelectedClaimIds] = React.useState<string[]>([]);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
-  
+  const [searchTerm, setSearchTerm] = React.useState("");
+
   const filteredClaims = React.useMemo(() => {
-    const claimsToFilter = claims;
-    if (!claimsToFilter) return [];
-    switch (filter) {
-      case 'needed':
-        return claimsToFilter.filter(c => !c.statementSent && c.patientPay > 0);
-      case 'sent':
-        return claimsToFilter.filter(c => c.statementSent);
-      case 'all':
-      default:
-        return claimsToFilter;
+    if (!claims) return [];
+
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    let working = claims;
+    if (filter === "needed") {
+      working = working.filter((c) => !c.statementSent && (c.patientPay ?? 0) > 0);
+    } else if (filter === "sent") {
+      working = working.filter((c) => c.statementSent);
     }
-  }, [claims, filter]);
+
+    if (!normalizedSearch) {
+      return working;
+    }
+
+    return working.filter((claim) => {
+      const haystack = [
+        claim.patientName,
+        claim.payee,
+        claim.payer,
+        claim.serviceDescription,
+        claim.productId,
+        claim.checkNumber,
+        claim.rx,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(normalizedSearch);
+    });
+  }, [claims, filter, searchTerm]);
 
   React.useEffect(() => {
     setSelectedClaimIds([]);
@@ -254,8 +276,8 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
         </Select>
       )
     }
-     if (typeof cellValue === 'number' && ['amount', 'paid', 'adjustment', 'patientPay'].includes(field)) {
-      return `$${cellValue.toFixed(2)}`;
+    if (typeof cellValue === 'number' && ['amount', 'paid', 'adjustment', 'patientPay'].includes(field)) {
+      return formatCurrency(cellValue);
     }
     if ((field.toLowerCase().includes('date') || field === 'serviceDate') && cellValue) {
         return formatDate(cellValue as string);
@@ -266,37 +288,82 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
 
 
   return (
-    <Tabs defaultValue="all" onValueChange={(value) => setFilter(value as any)}>
-      <div className="flex items-center gap-4">
-        <TabsList>
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="needed">Statement Needed</TabsTrigger>
-          <TabsTrigger value="sent">Statement Sent</TabsTrigger>
-        </TabsList>
+    <Tabs
+      defaultValue="all"
+      onValueChange={(value) => setFilter(value as any)}
+      className="rounded-3xl border border-white/40 bg-white/40 p-4 shadow-xl shadow-sky-200/40 backdrop-blur-xl"
+    >
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <TabsList className="bg-gradient-to-r from-indigo-400/80 via-sky-500/80 to-teal-300/80 p-[2px]">
+            <TabsTrigger
+              value="all"
+              className="rounded-2xl bg-white/80 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-white data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-400/70 data-[state=active]:to-sky-400/70 data-[state=active]:text-slate-50"
+            >
+              All
+            </TabsTrigger>
+            <TabsTrigger
+              value="needed"
+              className="rounded-2xl bg-white/50 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-white data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-400/80 data-[state=active]:to-cyan-400/80 data-[state=active]:text-slate-50"
+            >
+              Statement Needed
+            </TabsTrigger>
+            <TabsTrigger
+              value="sent"
+              className="rounded-2xl bg-white/50 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-white data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-400/80 data-[state=active]:to-emerald-300/80 data-[state=active]:text-slate-50"
+            >
+              Statement Sent
+            </TabsTrigger>
+          </TabsList>
+          <Input
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search patients, payers, or services..."
+            className="h-11 w-full min-w-[220px] max-w-xs rounded-2xl border-none bg-white/70 px-4 text-sm text-slate-600 shadow-inner shadow-sky-200/50 backdrop-blur"
+          />
+        </div>
         {numSelected > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">{numSelected} selected</span>
-            <Button variant="outline" size="sm" onClick={handleGenerateStatements}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-slate-600">
+              {numSelected} selected
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleGenerateStatements}
+              className="rounded-full border-none bg-gradient-to-r from-sky-500 to-teal-400 px-4 text-white shadow-lg shadow-sky-300/50 transition hover:shadow-xl"
+            >
               <FileText className="mr-2 h-4 w-4" />
               Generate Statements
             </Button>
-            <Button variant="destructive" size="sm" onClick={() => setIsDeleteDialogOpen(true)}>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setIsDeleteDialogOpen(true)}
+              className="rounded-full px-4"
+            >
               <Trash2 className="mr-2 h-4 w-4" />
               Delete ({numSelected})
             </Button>
           </div>
         )}
       </div>
-      <TabsContent value={filter}>
-        <Card>
-          <CardHeader>
-            <CardTitle>Claims</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="relative overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
+      <TabsContent value={filter} className="mt-6">
+        <Card className="border-none bg-white/70 p-[1px] shadow-2xl shadow-sky-200/50">
+          <div className="rounded-3xl bg-gradient-to-br from-white/90 via-white/70 to-white/60">
+            <CardHeader className="flex flex-col items-start gap-2 border-b border-white/60 px-6 py-6">
+              <CardTitle className="text-xl font-semibold text-slate-700">
+                Claims
+              </CardTitle>
+              <p className="text-sm text-slate-500">
+                Monitor and manage statements in real time.
+              </p>
+            </CardHeader>
+            <CardContent className="px-0 py-0">
+              <div className="relative overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                  <TableRow className="bg-white/60">
                     <TableHead>
                       <Checkbox
                         checked={isAllSelected}
@@ -335,7 +402,11 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
                 <TableBody>
                   {filteredClaims.length > 0 ? (
                     filteredClaims.map((claim) => (
-                      <TableRow key={claim.id} data-state={selectedClaimIds.includes(claim.id) ? "selected" : ""}>
+                      <TableRow
+                        key={claim.id}
+                        data-state={selectedClaimIds.includes(claim.id) ? "selected" : ""}
+                        className="bg-transparent transition hover:bg-sky-50/60"
+                      >
                          <TableCell>
                           <Checkbox
                             checked={selectedClaimIds.includes(claim.id)}
@@ -354,10 +425,10 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
                         <TableCell className="font-medium whitespace-nowrap">{claim.patientName}</TableCell>
                         <TableCell className="whitespace-nowrap">{claim.serviceDescription}</TableCell>
                         <TableCell className="whitespace-nowrap">{claim.productId}</TableCell>
-                        <TableCell className="whitespace-nowrap text-right">${claim.amount.toFixed(2)}</TableCell>
-                        <TableCell className="whitespace-nowrap text-right">${claim.paid.toFixed(2)}</TableCell>
-                        <TableCell className="whitespace-nowrap text-right">${claim.adjustment.toFixed(2)}</TableCell>
-                        <TableCell className="whitespace-nowrap text-right">${claim.patientPay.toFixed(2)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-right">{formatCurrency(claim.amount)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-right">{formatCurrency(claim.paid)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-right">{formatCurrency(claim.adjustment)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-right">{formatCurrency(claim.patientPay)}</TableCell>
                         <TableCell className="whitespace-nowrap">{renderCell(claim, 'paymentStatus')}</TableCell>
                         <TableCell className="whitespace-nowrap">{renderCell(claim, 'postingStatus')}</TableCell>
                         <TableCell className="whitespace-nowrap">{renderCell(claim, 'workflow')}</TableCell>
@@ -379,11 +450,13 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
                                     <span className="sr-only">Toggle menu</span>
                                   </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                  <DropdownMenuItem asChild>
-                                    <Link href={`/statement/${claim.id}`}>
-                                      <FileText className="mr-2 h-4 w-4" />
+                                <DropdownMenuContent align="end" className="rounded-2xl border border-slate-100 bg-white/90 shadow-lg">
+                                  <DropdownMenuLabel className="text-xs uppercase tracking-wide text-slate-500">
+                                    Actions
+                                  </DropdownMenuLabel>
+                                  <DropdownMenuItem asChild className="rounded-xl text-slate-600 focus:bg-sky-100/70">
+                                    <Link href={`/statement/${claim.id}`} className="flex items-center">
+                                      <FileText className="mr-2 h-4 w-4 text-sky-500" />
                                       Generate Statement
                                     </Link>
                                   </DropdownMenuItem>
@@ -403,10 +476,11 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
                 </TableBody>
               </Table>
             </div>
-          </CardContent>
+            </CardContent>
+          </div>
         </Card>
       </TabsContent>
-       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>

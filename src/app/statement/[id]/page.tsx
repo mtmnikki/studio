@@ -200,6 +200,7 @@ function StatementDetails({ data }: { data: StatementData }) {
 export default function StatementPage({ params }: { params: { id: string } }) {
   const [data, setData] = React.useState<StatementData | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const { firestore } = initializeFirebase();
 
   React.useEffect(() => {
@@ -207,6 +208,7 @@ export default function StatementPage({ params }: { params: { id: string } }) {
 
     if (!firestore) {
       setIsLoading(false);
+      setErrorMessage("We couldn't connect to Firestore. Please refresh the page or try again later.");
       return;
     }
 
@@ -215,13 +217,20 @@ export default function StatementPage({ params }: { params: { id: string } }) {
     fetchStatementDataByClaimId(firestore, params.id, calculateAccountNumber)
       .then((statementData) => {
         if (!isMounted) return;
-        setData(statementData);
+        if (!statementData) {
+          setErrorMessage("We couldn't find a statement for this claim.");
+          setData(null);
+        } else {
+          setErrorMessage(null);
+          setData(statementData);
+        }
         setIsLoading(false);
       })
       .catch((error) => {
         console.error("Failed to load statement", error);
         if (isMounted) {
           setData(null);
+          setErrorMessage("An unexpected error occurred while loading the statement.");
           setIsLoading(false);
         }
       });
@@ -232,18 +241,47 @@ export default function StatementPage({ params }: { params: { id: string } }) {
   }, [firestore, params.id]);
 
   if (isLoading) {
-    return <div className="p-8">Loading...</div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-indigo-400 via-sky-500 to-teal-300 p-8">
+        <div className="rounded-3xl bg-white/40 px-8 py-6 text-lg font-semibold text-slate-700 shadow-xl backdrop-blur">
+          Loading statement...
+        </div>
+      </div>
+    );
   }
 
-  if (!data) {
-    notFound();
+  if (!data || errorMessage) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-indigo-400 via-sky-500 to-teal-300 p-6">
+        <div className="no-print w-full max-w-xl rounded-3xl border border-white/40 bg-white/50 p-8 text-center shadow-2xl backdrop-blur-xl">
+          <h2 className="text-2xl font-semibold text-slate-700">Statement unavailable</h2>
+          <p className="mt-3 text-sm text-slate-600">
+            {errorMessage ?? "We couldn't locate the requested statement."}
+          </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <Button variant="outline" asChild className="rounded-full border-slate-200 bg-white/70 px-5 text-slate-600 shadow-sm">
+              <Link href="/dashboard">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to Dashboard
+              </Link>
+            </Button>
+            <Button
+              onClick={() => window.location.reload()}
+              className="rounded-full bg-gradient-to-r from-sky-500 to-teal-400 px-5 text-white shadow-lg hover:shadow-xl"
+            >
+              Try Again
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="bg-background min-h-screen p-4 sm:p-8 font-sans text-sm">
-      <div className="max-w-4xl mx-auto">
-        <div className="no-print mb-8 flex flex-wrap gap-3 justify-between items-center">
-          <Button variant="outline" asChild>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-400 via-sky-500 to-teal-300 p-4 sm:p-8 font-sans text-sm">
+      <div className="mx-auto max-w-5xl">
+        <div className="no-print mb-8 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/40 bg-white/50 px-5 py-4 shadow-lg backdrop-blur-xl">
+          <Button variant="outline" asChild className="rounded-full border-slate-200 bg-white/70 px-5 text-slate-600 shadow-sm hover:bg-white">
             <Link href="/dashboard">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Dashboard
@@ -255,7 +293,9 @@ export default function StatementPage({ params }: { params: { id: string } }) {
           />
         </div>
 
-        <StatementDetails data={data} />
+        <div className="rounded-3xl border border-white/70 bg-white/90 p-8 shadow-2xl">
+          <StatementDetails data={data} />
+        </div>
       </div>
     </div>
   );
