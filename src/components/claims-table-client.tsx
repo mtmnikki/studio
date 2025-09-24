@@ -76,26 +76,26 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Check Date</TableHead>
-                  <TableHead>Check #</TableHead>
-                  <TableHead>NPI</TableHead>
-                  <TableHead>Payee</TableHead>
-                  <TableHead>Payer</TableHead>
-                  <TableHead>Rx #</TableHead>
-                  <TableHead>DOS</TableHead>
-                  <TableHead>Cardholder ID</TableHead>
-                  <TableHead>Patient</TableHead>
-                  <TableHead>Service</TableHead>
-                  <TableHead>CPT/HCPCS</TableHead>
-                  <TableHead>Billed</TableHead>
-                  <TableHead>Paid</TableHead>
-                  <TableHead>Adjustment</TableHead>
-                  <TableHead>Patient Pay</TableHead>
-                  <TableHead>Payment Status</TableHead>
-                  <TableHead>Posting Status</TableHead>
-                  <TableHead>Workflow</TableHead>
-                  <TableHead>Notes</TableHead>
-                  <TableHead>1st Stmt Sent?</TableHead>
+                  <TableHead className="whitespace-nowrap">Check Date</TableHead>
+                  <TableHead className="whitespace-nowrap">Check #</TableHead>
+                  <TableHead className="whitespace-nowrap">NPI</TableHead>
+                  <TableHead className="whitespace-nowrap">Payee</TableHead>
+                  <TableHead className="whitespace-nowrap">Payer</TableHead>
+                  <TableHead className="whitespace-nowrap">Rx #</TableHead>
+                  <TableHead className="whitespace-nowrap">DOS</TableHead>
+                  <TableHead className="whitespace-nowrap">Cardholder ID</TableHead>
+                  <TableHead className="whitespace-nowrap">Patient</TableHead>
+                  <TableHead className="whitespace-nowrap">Service</TableHead>
+                  <TableHead className="whitespace-nowrap">CPT/HCPCS</TableHead>
+                  <TableHead className="whitespace-nowrap">Billed</TableHead>
+                  <TableHead className="whitespace-nowrap">Paid</TableHead>
+                  <TableHead className="whitespace-nowrap">Adjustment</TableHead>
+                  <TableHead className="whitespace-nowrap">Patient Pay</TableHead>
+                  <TableHead className="whitespace-nowrap">Payment Status</TableHead>
+                  <TableHead className="whitespace-nowrap">Posting Status</TableHead>
+                  <TableHead className="whitespace-nowrap">Workflow</TableHead>
+                  <TableHead className="whitespace-nowrap">Notes</TableHead>
+                  <TableHead className="whitespace-nowrap">1st Stmt Sent?</TableHead>
                   <TableHead>
                     <span className="sr-only">Actions</span>
                   </TableHead>
@@ -105,29 +105,29 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
                 {filteredClaims.length > 0 ? (
                   filteredClaims.map((claim) => (
                     <TableRow key={claim.id}>
-                      <TableCell>{new Date(claim.checkDate).toLocaleDateString()}</TableCell>
-                      <TableCell>{claim.checkNumber}</TableCell>
-                      <TableCell>{claim.npi}</TableCell>
-                      <TableCell>{claim.payee}</TableCell>
-                      <TableCell>{claim.payer}</TableCell>
-                      <TableCell>{claim.rx}</TableCell>
-                      <TableCell>{new Date(claim.serviceDate).toLocaleDateString()}</TableCell>
-                      <TableCell>{claim.cardholderId}</TableCell>
-                      <TableCell className="font-medium">{claim.patientName}</TableCell>
-                      <TableCell>{claim.serviceDescription}</TableCell>
-                      <TableCell>{claim.productId}</TableCell>
-                      <TableCell>${claim.amount.toFixed(2)}</TableCell>
-                      <TableCell>${claim.paid.toFixed(2)}</TableCell>
-                      <TableCell>${claim.adjustment.toFixed(2)}</TableCell>
-                      <TableCell>${claim.patientPay.toFixed(2)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{new Date(claim.checkDate).toLocaleDateString()}</TableCell>
+                      <TableCell className="whitespace-nowrap">{claim.checkNumber}</TableCell>
+                      <TableCell className="whitespace-nowrap">{claim.npi}</TableCell>
+                      <TableCell className="whitespace-nowrap">{claim.payee}</TableCell>
+                      <TableCell className="whitespace-nowrap">{claim.payer}</TableCell>
+                      <TableCell className="whitespace-nowrap">{claim.rx}</TableCell>
+                      <TableCell className="whitespace-nowrap">{new Date(claim.serviceDate).toLocaleDateString()}</TableCell>
+                      <TableCell className="whitespace-nowrap">{claim.cardholderId}</TableCell>
+                      <TableCell className="font-medium whitespace-nowrap">{claim.patientName}</TableCell>
+                      <TableCell className="whitespace-nowrap">{claim.serviceDescription}</TableCell>
+                      <TableCell className="whitespace-nowrap">{claim.productId}</TableCell>
+                      <TableCell className="whitespace-nowrap">${claim.amount.toFixed(2)}</TableCell>
+                      <TableCell className="whitespace-nowrap">${claim.paid.toFixed(2)}</TableCell>
+                      <TableCell className="whitespace-nowrap">${claim.adjustment.toFixed(2)}</TableCell>
+                      <TableCell className="whitespace-nowrap">${claim.patientPay.toFixed(2)}</TableCell>
                       <TableCell>
                         <Badge variant={claim.paymentStatus === 'PAID' ? "secondary" : "destructive"}>
                           {claim.paymentStatus}
                         </Badge>
                       </TableCell>
-                      <TableCell>{claim.postingStatus}</TableCell>
-                      <TableCell>{claim.workflow}</TableCell>
-                      <TableCell>{claim.notes}</TableCell>
+                      <TableCell className="whitespace-nowrap">{claim.postingStatus}</TableCell>
+                      <TableCell className="whitespace-nowrap">{claim.workflow}</TableCell>
+                      <TableCell className="whitespace-nowrap">{claim.notes}</TableCell>
                       <TableCell>
                         <Badge variant={claim.statementSent ? 'default' : 'outline'}>
                           {claim.statementSent ? 'Yes' : 'No'}
