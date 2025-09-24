@@ -7,13 +7,11 @@ import { PrintStatementButton } from "@/components/print-statement-button";
 import type { Claim, Patient } from "@/lib/types";
 import { doc, getDoc, getDocs, collection, query, where } from "firebase/firestore";
 import { getSdks } from "@/firebase";
+import { useEffect, useState } from "react";
 import { initializeFirebase } from "@/firebase";
 
-// This is a temporary solution for server-side data fetching.
-// In a real app, you would have a more robust way of getting the firestore instance.
-const { firestore } = initializeFirebase();
 
-async function getStatementData(claimId: string): Promise<{
+async function getStatementData(claimId: string, firestore: any): Promise<{
     claims: Claim[];
     patient: Patient;
     accountNumber: string;
@@ -48,10 +46,10 @@ async function getStatementData(claimId: string): Promise<{
         patient = { id: patientSnap.id, ...patientSnap.data() } as Patient;
     }
 
-    return getStatementDataForPatient(patient, initialClaim);
+    return getStatementDataForPatient(patient, initialClaim, firestore);
 }
 
-async function getStatementDataForPatient(patient: Patient, initialClaim: Claim) {
+async function getStatementDataForPatient(patient: Patient, initialClaim: Claim, firestore: any) {
     if (!firestore) return null;
     const claimsQuery = query(
         collection(firestore, "claims"),
@@ -82,8 +80,20 @@ function formatDate(dateString: string) {
 }
 
 
-export default async function StatementPage({ params }: { params: { id: string } }) {
-  const data = await getStatementData(params.id);
+export default function StatementPage({ params }: { params: { id: string } }) {
+  const [data, setData] = useState<any>(null);
+  useEffect(() => {
+    const { firestore } = initializeFirebase();
+    async function fetchData() {
+      const statementData = await getStatementData(params.id, firestore);
+      setData(statementData);
+    }
+    fetchData();
+  }, [params.id]);
+
+  if (!data) {
+    return <div>Loading...</div>;
+  }
 
   if (!data) {
     notFound();
