@@ -7,9 +7,13 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function calculateAccountNumber(patient: Patient): string {
-  const [year, month, day] = patient.dateOfBirth.split('-');
-  const firstInitial = patient.firstName.charAt(0).toUpperCase();
-  const lastInitial = patient.lastName.charAt(0).toUpperCase();
+  const rawDob = typeof patient.dateOfBirth === 'string' && patient.dateOfBirth.includes('-')
+    ? patient.dateOfBirth
+    : '1900-01-01';
+  const [year = '1900', month = '01', day = '01'] = rawDob.split('-');
+
+  const firstInitial = (patient.firstName?.charAt(0) || 'X').toUpperCase();
+  const lastInitial = (patient.lastName?.charAt(0) || 'X').toUpperCase();
 
   return `${firstInitial}${month}0${day}${lastInitial}${year}`;
 }

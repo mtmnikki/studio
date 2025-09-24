@@ -154,14 +154,19 @@ export const useFirebaseApp = (): FirebaseApp => {
   return firebaseApp;
 };
 
-type MemoFirebase <T> = T & {__memo?: boolean};
+const memoizedFirebaseTargets = new WeakSet<object>();
 
-export function useMemoFirebase<T>(factory: () => T, deps: DependencyList): T | (MemoFirebase<T>) {
+export function isMemoizedFirebaseTarget(target: unknown): target is object {
+  return typeof target === 'object' && target !== null && memoizedFirebaseTargets.has(target as object);
+}
+
+export function useMemoFirebase<T>(factory: () => T, deps: DependencyList): T {
   const memoized = useMemo(factory, deps);
-  
-  if(typeof memoized !== 'object' || memoized === null) return memoized;
-  (memoized as MemoFirebase<T>).__memo = true;
-  
+
+  if (typeof memoized === 'object' && memoized !== null) {
+    memoizedFirebaseTargets.add(memoized as object);
+  }
+
   return memoized;
 }
 

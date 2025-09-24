@@ -153,7 +153,24 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
   const handleGenerateStatements = () => {
     const selectedClaims = claims.filter(c => selectedClaimIds.includes(c.id));
     // Ensure we only get unique patient IDs
-    const patientIds = [...new Set(selectedClaims.map(c => c.patientId))];
+    const patientIds = [
+      ...new Set(
+        selectedClaims
+          .map((c) => c.patientId)
+          .filter((id): id is string => Boolean(id))
+      ),
+    ];
+
+    if (!patientIds.length) {
+      toast({
+        title: "Missing patient information",
+        description:
+          "Select claims with a linked patient before generating statements.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const query = new URLSearchParams(patientIds.map(id => ['p', id])).toString();
     router.push(`/statement/bulk?${query}`);
   };
@@ -267,15 +284,15 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
 
   return (
     <Tabs defaultValue="all" onValueChange={(value) => setFilter(value as any)}>
-      <div className="flex items-center gap-4">
-        <TabsList>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <TabsList className="flex w-full flex-wrap justify-start gap-2 rounded-2xl bg-white/70 p-1 text-xs font-semibold text-slate-600 shadow-inner backdrop-blur md:w-auto">
           <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="needed">Statement Needed</TabsTrigger>
           <TabsTrigger value="sent">Statement Sent</TabsTrigger>
         </TabsList>
         {numSelected > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">{numSelected} selected</span>
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/60 bg-white/60 px-4 py-2 shadow">
+            <span className="text-sm font-semibold text-slate-600">{numSelected} selected</span>
             <Button variant="outline" size="sm" onClick={handleGenerateStatements}>
               <FileText className="mr-2 h-4 w-4" />
               Generate Statements
@@ -288,12 +305,17 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
         )}
       </div>
       <TabsContent value={filter}>
-        <Card>
+        <Card className="border-white/50 bg-white/60">
           <CardHeader>
-            <CardTitle>Claims</CardTitle>
+            <CardTitle className="flex items-center gap-3 text-2xl font-semibold text-slate-900">
+              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-500 via-sky-500 to-teal-400 p-2 text-white shadow">
+                <FileText className="h-full w-full" />
+              </div>
+              Claims workspace
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="relative overflow-x-auto">
+            <div className="relative">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -335,7 +357,7 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
                 <TableBody>
                   {filteredClaims.length > 0 ? (
                     filteredClaims.map((claim) => (
-                      <TableRow key={claim.id} data-state={selectedClaimIds.includes(claim.id) ? "selected" : ""}>
+                      <TableRow key={claim.id} data-state={selectedClaimIds.includes(claim.id) ? "selected" : ""} className="bg-white/60">
                          <TableCell>
                           <Checkbox
                             checked={selectedClaimIds.includes(claim.id)}
@@ -381,12 +403,29 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                  <DropdownMenuItem asChild>
-                                    <Link href={`/statement/${claim.id}`}>
+                                  {claim.patientId ? (
+                                    <DropdownMenuItem asChild>
+                                      <Link href={`/statement/${claim.id}`}>
+                                        <FileText className="mr-2 h-4 w-4" />
+                                        Generate Statement
+                                      </Link>
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem
+                                      onSelect={(event) => {
+                                        event.preventDefault();
+                                        toast({
+                                          title: "Patient not linked",
+                                          description:
+                                            "Assign a patient to this claim to build a statement.",
+                                          variant: "destructive",
+                                        });
+                                      }}
+                                    >
                                       <FileText className="mr-2 h-4 w-4" />
-                                      Generate Statement
-                                    </Link>
-                                  </DropdownMenuItem>
+                                      Link patient to generate
+                                    </DropdownMenuItem>
+                                  )}
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </div>
@@ -395,7 +434,7 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={23} className="h-24 text-center">
+                      <TableCell colSpan={23} className="h-24 text-center text-slate-500">
                         No claims found for this filter.
                       </TableCell>
                     </TableRow>

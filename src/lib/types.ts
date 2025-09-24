@@ -1,14 +1,50 @@
+export interface PatientAddress {
+  street?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+}
+
 export interface Patient {
   id: string;
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string; // YYYY-MM-DD
-  address: {
-    street: string;
-    city: string;
-    state: string;
-    zip: string;
+  firstName?: string;
+  lastName?: string;
+  dateOfBirth?: string; // YYYY-MM-DD
+  email?: string;
+  phone?: string;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  address?: PatientAddress;
+}
+
+export interface Pharmacy {
+  id: string;
+  name: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
+  status?: string;
+  tags?: string[];
+  notes?: string;
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
   };
+  lastUpdated?: string;
+  createdAt?: string;
+}
+
+export interface Note {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  pinned?: boolean;
+  tags?: string[];
 }
 
 export interface Claim {

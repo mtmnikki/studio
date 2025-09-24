@@ -24,6 +24,25 @@ export default function ImportPage() {
     }
   };
 
+  const parseCurrency = (value: unknown) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+
+    if (!value) {
+      return 0;
+    }
+
+    const cleaned = String(value)
+      .replace(/[$,]/g, "")
+      .replace(/\((.*)\)/, "-$1")
+      .replace(/[^0-9.-]/g, "");
+
+    const parsed = parseFloat(cleaned);
+
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
   const handleProcessData = () => {
     if (!selectedFile) {
       toast({
@@ -71,10 +90,10 @@ export default function ImportPage() {
               patientId: patientId, // Assign a temporary patientId
               serviceDescription: row["Service"] || '',
               productId: row["CPT/HCPCS Code"] || '',
-              amount: parseFloat(row["Billed"] || '0'),
-              paid: parseFloat(row["Paid"] || '0'),
-              adjustment: parseFloat(row["Adjustment"] || '0'),
-              patientPay: parseFloat(row["Patient Pay"] || '0'),
+              amount: parseCurrency(row["Billed"]),
+              paid: parseCurrency(row["Paid"]),
+              adjustment: parseCurrency(row["Adjustment"]),
+              patientPay: parseCurrency(row["Patient Pay"]),
               paymentStatus: row["Payment Status"] || 'PENDING',
               postingStatus: row["Posting Status"] || 'Unposted',
               workflow: row["Workflow"] || 'New',
@@ -127,25 +146,41 @@ export default function ImportPage() {
         title="Import Data"
         description="Upload a CSV file to create new claims."
       />
-      <Card>
-        <CardHeader>
-          <CardTitle>Upload Claim Data</CardTitle>
-          <CardDescription>
+      <Card className="border-white/60 bg-white/50">
+        <CardHeader className="space-y-3">
+          <CardTitle className="text-2xl text-slate-900">Upload claim data</CardTitle>
+          <CardDescription className="text-slate-600">
             Select a CSV file containing the claim data. The columns must match the expected format. New claims will be added to the dashboard.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <div className="rounded-3xl border border-dashed border-white/60 bg-white/70 p-6 text-sm text-slate-600 shadow-inner">
+            <p className="font-semibold text-slate-800">Tips for perfect imports</p>
+            <ul className="mt-2 space-y-1 text-xs leading-5">
+              <li>• Ensure currency values omit special characters besides $ and commas.</li>
+              <li>• Include patient identifiers to keep statements flowing smoothly.</li>
+              <li>• We'll auto-detect dates and patient balances for you.</li>
+            </ul>
+          </div>
           <Input
             id="csv-upload"
             type="file"
             accept=".csv"
             onChange={handleFileChange}
             disabled={isLoading}
+            className="rounded-2xl border border-white/60 bg-white/80"
           />
         </CardContent>
-        <CardFooter className="border-t px-6 py-4">
+        <CardFooter className="flex items-center justify-end gap-3 border-t border-white/40 px-6 py-4">
+          <Button variant="outline" onClick={() => {
+            setSelectedFile(null);
+            const fileInput = document.getElementById('csv-upload') as HTMLInputElement;
+            if (fileInput) fileInput.value = '';
+          }} disabled={isLoading}>
+            Reset
+          </Button>
           <Button onClick={handleProcessData} disabled={isLoading || !selectedFile}>
-            {isLoading ? "Processing..." : "Process Data"}
+            {isLoading ? "Processing..." : "Process data"}
           </Button>
         </CardFooter>
       </Card>

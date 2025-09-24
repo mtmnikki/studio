@@ -33,6 +33,25 @@ function Statement({ data }: { data: StatementData }) {
     statementDate.getTime() + 30 * 24 * 60 * 60 * 1000
   );
 
+  const patientName = [patient.firstName, patient.lastName]
+    .filter((part) => !!part)
+    .map((part) => String(part).toUpperCase())
+    .join(" ") || patient.id.toUpperCase();
+
+  const addressLine1 = patient.address?.street
+    ? patient.address.street.toUpperCase()
+    : "ADDRESS UNAVAILABLE";
+
+  const addressLine2Parts = [
+    patient.address?.city,
+    patient.address?.state,
+    patient.address?.zip,
+  ]
+    .filter((part) => !!part)
+    .map((part) => String(part).toUpperCase());
+
+  const addressLine2 = addressLine2Parts.join(", ");
+
   return (
     <div className="bg-card p-8 rounded-lg shadow-sm border text-black break-after-page mb-8">
       <header className="grid grid-cols-2 items-start mb-8">
@@ -48,14 +67,9 @@ function Statement({ data }: { data: StatementData }) {
       </header>
 
       <section className="mb-6">
-        <p className="font-bold">
-          {patient.firstName.toUpperCase()} {patient.lastName.toUpperCase()}
-        </p>
-        <p>{patient.address.street.toUpperCase()}</p>
-        <p>
-          {patient.address.city.toUpperCase()}, {patient.address.state.toUpperCase()} {" "}
-          {patient.address.zip}
-        </p>
+        <p className="font-bold">{patientName}</p>
+        <p>{addressLine1}</p>
+        {addressLine2 && <p>{addressLine2}</p>}
       </section>
 
       <section className="mb-8">
@@ -148,14 +162,9 @@ function Statement({ data }: { data: StatementData }) {
 
         <div className="text-xs">
           <div className="pl-8 pt-12">
-            <p className="font-bold">
-              {patient.firstName.toUpperCase()} {patient.lastName.toUpperCase()}
-            </p>
-            <p>{patient.address.street.toUpperCase()}</p>
-            <p>
-              {patient.address.city.toUpperCase()}, {patient.address.state.toUpperCase()} {" "}
-              {patient.address.zip}
-            </p>
+            <p className="font-bold">{patientName}</p>
+            <p>{addressLine1}</p>
+            {addressLine2 && <p>{addressLine2}</p>}
           </div>
         </div>
       </div>
