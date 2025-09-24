@@ -60,7 +60,9 @@ const formatDate = (dateString: string) => {
       const year = parseInt(parts[0], 10);
       const month = parseInt(parts[1], 10) - 1; // month is 0-indexed
       const day = parseInt(parts[2], 10);
-      return new Date(year, month, day).toLocaleDateString();
+      const date = new Date(year, month, day);
+      const userTimezoneOffset = date.getTimezoneOffset() * 60000;
+      return new Date(date.getTime() + userTimezoneOffset).toLocaleDateString();
     }
     return dateString; // Fallback for unexpected formats
 }
@@ -167,12 +169,15 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
     }
      if (field === 'notes') {
       return (
-        <Select value={claim.notes} onValueChange={(value) => handleFieldChange(claim.id, 'notes', value)}>
+        <Select
+          value={claim.notes}
+          onValueChange={(value) => handleFieldChange(claim.id, 'notes', value === '__none__' ? '' : value)}
+        >
           <SelectTrigger className="h-8 w-[200px] bg-transparent border-0 shadow-none focus:ring-0">
-             <div className="truncate">{claim.notes || <span className="text-muted-foreground">Select note...</span>}</div>
+             <div className="truncate">{claim.notes || <span className="text-muted-foreground">Add a note...</span>}</div>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">None</SelectItem>
+            <SelectItem value="__none__">None</SelectItem>
             {noteOptions.map(option => (
               <SelectItem key={option} value={option}>{option}</SelectItem>
             ))}
@@ -365,3 +370,5 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
     </Tabs>
   );
 }
+
+    
