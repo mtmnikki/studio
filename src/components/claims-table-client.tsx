@@ -1,0 +1,135 @@
+"use client";
+
+import * as React from "react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MoreHorizontal, FileText } from "lucide-react";
+import Link from "next/link";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { Claim } from "@/lib/types";
+
+export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] }) {
+  const [claims, setClaims] = React.useState<Claim[]>(initialClaims);
+  const [filter, setFilter] = React.useState<"all" | "needed" | "sent">("all");
+  
+  const filteredClaims = React.useMemo(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const updatedClaimId = urlParams.get('updated');
+      if (updatedClaimId && !claims.find(c => c.id === updatedClaimId)?.statementSent) {
+        // This effect runs only once on client-side after a redirect
+        // to update the state, simulating a database update.
+        setTimeout(() => {
+          setClaims(prevClaims => 
+            prevClaims.map(c => 
+              c.id === updatedClaimId ? { ...c, statementSent: true } : c
+            )
+          );
+          // Clean the URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }, 0);
+      }
+    }
+    
+    switch (filter) {
+      case 'needed':
+        return claims.filter(c => !c.statementSent);
+      case 'sent':
+        return claims.filter(c => c.statementSent);
+      case 'all':
+      default:
+        return claims;
+    }
+  }, [claims, filter]);
+
+  return (
+    <Tabs defaultValue="all" onValueChange={(value) => setFilter(value as any)}>
+      <div className="flex items-center">
+        <TabsList>
+          <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="needed">Statement Needed</TabsTrigger>
+          <TabsTrigger value="sent">Statement Sent</TabsTrigger>
+        </TabsList>
+      </div>
+      <TabsContent value={filter}>
+        <Card>
+          <CardHeader>
+            <CardTitle>Claims</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Patient</TableHead>
+                  <TableHead>Service Date</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredClaims.length > 0 ? (
+                  filteredClaims.map((claim) => (
+                    <TableRow key={claim.id}>
+                      <TableCell className="font-medium">{claim.patientName}</TableCell>
+                      <TableCell>{new Date(claim.serviceDate).toLocaleDateString()}</TableCell>
+                      <TableCell>${claim.amount.toFixed(2)}</TableCell>
+                      <TableCell>
+                        <Badge variant={claim.statementSent ? "secondary" : "default"} className={!claim.statementSent ? 'bg-accent text-accent-foreground' : ''}>
+                          {claim.statementSent ? "Sent" : "Needed"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button aria-haspopup="true" size="icon" variant="ghost">
+                              <MoreHorizontal className="h-4 w-4" />
+                              <span className="sr-only">Toggle menu</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuItem asChild>
+                              <Link href={`/statement/${claim.id}`}>
+                                <FileText className="mr-2 h-4 w-4" />
+                                Generate Statement
+                              </Link>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center">
+                      No claims found for this filter.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </TabsContent>
+    </Tabs>
+  );
+}

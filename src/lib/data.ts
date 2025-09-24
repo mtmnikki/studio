@@ -1,0 +1,98 @@
+import type { Patient, Claim } from './types';
+
+export const patients: Patient[] = [
+  {
+    id: 'pat_001',
+    firstName: 'Alice',
+    lastName: 'Smith',
+    dateOfBirth: '1985-05-15',
+    address: {
+      street: '123 Maple St',
+      city: 'Anytown',
+      state: 'CA',
+      zip: '12345',
+    },
+  },
+  {
+    id: 'pat_002',
+    firstName: 'Bob',
+    lastName: 'Johnson',
+    dateOfBirth: '1992-11-20',
+    address: {
+      street: '456 Oak Ave',
+      city: 'Someville',
+      state: 'NY',
+      zip: '54321',
+    },
+  },
+  {
+    id: 'pat_003',
+    firstName: 'Charlie',
+    lastName: 'Brown',
+    dateOfBirth: '1978-02-10',
+    address: {
+      street: '789 Pine Ln',
+      city: 'Metropolis',
+      state: 'IL',
+      zip: '67890',
+    },
+  },
+];
+
+export const claims: Claim[] = [
+  {
+    id: 'clm_001',
+    patientId: 'pat_001',
+    patientName: 'Alice Smith',
+    serviceDate: '2024-05-01',
+    serviceDescription: 'Routine Check-up',
+    amount: 150.0,
+    statementSent: true,
+    checkNumber: 'CHK1001',
+    checkDate: '2024-05-10',
+  },
+  {
+    id: 'clm_002',
+    patientId: 'pat_002',
+    patientName: 'Bob Johnson',
+    serviceDate: '2024-05-03',
+    serviceDescription: 'Consultation',
+    amount: 75.5,
+    statementSent: false,
+    checkNumber: 'CHK1002',
+    checkDate: '2024-05-12',
+  },
+  {
+    id: 'clm_003',
+    patientId: 'pat_001',
+    patientName: 'Alice Smith',
+    serviceDate: '2024-05-15',
+    serviceDescription: 'Follow-up Visit',
+    amount: 90.0,
+    statementSent: false,
+    checkNumber: 'CHK1003',
+    checkDate: '2024-05-20',
+  },
+  {
+    id: 'clm_004',
+    patientId: 'pat_003',
+    patientName: 'Charlie Brown',
+    serviceDate: '2024-04-20',
+    serviceDescription: 'Specialist Referral',
+    amount: 250.0,
+    statementSent: true,
+    checkNumber: 'CHK0987',
+    checkDate: '2024-05-01',
+  },
+  {
+    id: 'clm_005',
+    patientId: 'pat_003',
+    patientName: 'Charlie Brown',
+    serviceDate: '2024-05-18',
+    serviceDescription: 'Lab Work',
+    amount: 125.75,
+    statementSent: false,
+    checkNumber: 'CHK1005',
+    checkDate: '2024-05-25',
+  },
+];
