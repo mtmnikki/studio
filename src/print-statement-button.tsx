@@ -4,22 +4,28 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Printer } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useClaims } from "@/hooks/use-claims";
 
-export function PrintStatementButton({ claimId, patientId }: { claimId: string, patientId: string }) {
+export function PrintStatementButton({ claimId }: { claimId: string }) {
   const { toast } = useToast();
   const router = useRouter();
+  const { setClaims } = useClaims();
   
   const handlePrintAndMarkSent = () => {
-    // We pass the patient ID to the dashboard now, to mark all their claims as sent.
-    // In a real app, this would be an API call.
+    setClaims(prevClaims => 
+      prevClaims.map(c => 
+        c.id === claimId ? { ...c, statementSent: true } : c
+      )
+    );
+
     toast({
       title: "Statement Status Updated",
-      description: "The patient's claims have been marked as '1st Statement Sent'.",
+      description: "The claim has been marked as '1st Statement Sent'.",
     });
 
     setTimeout(() => {
         window.print();
-        router.push(`/dashboard?updatedPatient=${patientId}`);
+        router.push(`/dashboard?updated=${claimId}`);
     }, 200);
   };
 

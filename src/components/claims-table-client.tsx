@@ -23,25 +23,25 @@ import { MoreHorizontal, FileText } from "lucide-react";
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Claim } from "@/lib/types";
+import { useClaims } from "@/hooks/use-claims";
 
 export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] }) {
-  const [claims, setClaims] = React.useState<Claim[]>(initialClaims);
+  const { claims, setClaims, getClaimStatus } = useClaims(initialClaims);
   const [filter, setFilter] = React.useState<"all" | "needed" | "sent">("all");
   
   const filteredClaims = React.useMemo(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       const updatedClaimId = urlParams.get('updated');
-      if (updatedClaimId && !claims.find(c => c.id === updatedClaimId)?.statementSent) {
-        // This effect runs only once on client-side after a redirect
-        // to update the state, simulating a database update.
+      const claimStatus = getClaimStatus(updatedClaimId);
+
+      if (updatedClaimId && claimStatus && !claimStatus.statementSent) {
         setTimeout(() => {
           setClaims(prevClaims => 
             prevClaims.map(c => 
               c.id === updatedClaimId ? { ...c, statementSent: true } : c
             )
           );
-          // Clean the URL
           window.history.replaceState({}, document.title, window.location.pathname);
         }, 0);
       }
@@ -56,7 +56,7 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
       default:
         return claims;
     }
-  }, [claims, filter]);
+  }, [claims, filter, setClaims, getClaimStatus]);
 
   return (
     <Tabs defaultValue="all" onValueChange={(value) => setFilter(value as any)}>

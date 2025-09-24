@@ -16,10 +16,22 @@ async function getStatementData(claimId: string) {
 
   const patient = patients.find((p) => p.id === initialClaim.patientId);
   if (!patient) {
-    return null;
+    // In a real app, we might create a dummy patient record from the claim
+    const tempPatient: Patient = {
+        id: initialClaim.patientId,
+        firstName: initialClaim.patientName.split(' ')[0] || 'Patient',
+        lastName: initialClaim.patientName.split(' ')[1] || '',
+        dateOfBirth: '1900-01-01', // Placeholder
+        address: { street: 'N/A', city: 'N/A', state: 'N/A', zip: 'N/A' },
+    };
+    return getStatementDataForPatient(tempPatient, initialClaim);
   }
 
-  // Find all claims for this patient that need a statement
+  return getStatementDataForPatient(patient, initialClaim);
+}
+
+function getStatementDataForPatient(patient: Patient, initialClaim: Claim) {
+    // Find all claims for this patient that need a statement
   const patientClaims = claims.filter(
     (c) => c.patientId === patient.id && !c.statementSent
   );
@@ -57,8 +69,7 @@ export default async function StatementPage({ params }: { params: { id: string }
               Back to Dashboard
             </Link>
           </Button>
-          {/* We pass the first claim ID for marking as sent, assuming all are marked */}
-          <PrintStatementButton claimId={params.id} />
+          <PrintStatementButton claimId={params.id} patientId={patient.id} />
         </div>
 
         {/* Statement Content */}
