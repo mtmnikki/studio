@@ -1,12 +1,12 @@
 "use client";
 
-import * as React from "react";
+import React from "react";
+import { collection } from "firebase/firestore";
+
 import type { Pharmacy } from "@/lib/types";
 import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
-import { collection, doc } from "firebase/firestore";
-import { updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 
-export function usePharmacies(initialPharmacies: Pharmacy[] = []) {
+export const usePharmacies = () => {
   const firestore = useFirestore();
 
   const pharmaciesCollection = useMemoFirebase(() => {
@@ -14,26 +14,17 @@ export function usePharmacies(initialPharmacies: Pharmacy[] = []) {
     return collection(firestore, "pharmacies");
   }, [firestore]);
 
-  const { data, isLoading, error } = useCollection<Pharmacy>(pharmaciesCollection);
+  const { data: pharmaciesSnapshot, isLoading, error } =
+    useCollection<Pharmacy>(pharmaciesCollection);
 
-  const pharmacies = React.useMemo(() => {
-    const values = data ?? initialPharmacies ?? [];
-    return [...values].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
-  }, [data, initialPharmacies]);
-
-  const updatePharmacy = React.useCallback(
-    (pharmacyId: string, updates: Partial<Pharmacy>) => {
-      if (!firestore) return;
-      const ref = doc(firestore, "pharmacies", pharmacyId);
-      updateDocumentNonBlocking(ref, updates);
-    },
-    [firestore]
+  const pharmacies = React.useMemo(
+    () => pharmaciesSnapshot ?? [],
+    [pharmaciesSnapshot]
   );
 
   return {
     pharmacies,
     isLoading,
     error,
-    updatePharmacy,
   };
-}
+};

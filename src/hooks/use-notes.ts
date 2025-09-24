@@ -1,18 +1,18 @@
 "use client";
 
-import * as React from "react";
-import type { JennNote } from "@/lib/types";
+import React from "react";
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  updateDoc,
+} from "firebase/firestore";
+
+import type { Note } from "@/lib/types";
 import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
-import { collection, deleteDoc, doc, setDoc, updateDoc } from "firebase/firestore";
 
-export type CreateNoteInput = {
-  title: string;
-  body: string;
-  tags?: string[];
-  mood?: JennNote["mood"];
-};
-
-export function useJennNotes(initialNotes: JennNote[] = []) {
+export const useNotes = () => {
   const firestore = useFirestore();
 
   const notesCollection = useMemoFirebase(() => {
@@ -20,36 +20,29 @@ export function useJennNotes(initialNotes: JennNote[] = []) {
     return collection(firestore, "notes");
   }, [firestore]);
 
-  const { data, isLoading, error } = useCollection<JennNote>(notesCollection);
+  const { data: notesSnapshot, isLoading, error } = useCollection<Note>(
+    notesCollection
+  );
 
-  const notes = React.useMemo(() => {
-    const values = data ?? initialNotes ?? [];
-    return [...values].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
-  }, [data, initialNotes]);
+  const notes = React.useMemo(() => notesSnapshot ?? [], [notesSnapshot]);
 
   const addNote = React.useCallback(
-    async (input: CreateNoteInput) => {
-      if (!firestore) return null;
-      const ref = doc(collection(firestore, "notes"));
-      const now = new Date().toISOString();
-      await setDoc(ref, {
-        title: input.title,
-        body: input.body,
-        tags: input.tags ?? [],
-        mood: input.mood ?? "follow-up",
-        createdAt: now,
-        updatedAt: now,
+    async (note: Pick<Note, "title" | "content" | "tags" | "pinned">) => {
+      if (!notesCollection) return;
+      const timestamp = new Date().toISOString();
+      await addDoc(notesCollection, {
+        ...note,
+        createdAt: timestamp,
+        updatedAt: timestamp,
       });
-      return ref.id;
     },
-    [firestore]
+    [notesCollection]
   );
 
   const updateNote = React.useCallback(
-    async (noteId: string, updates: Partial<CreateNoteInput>) => {
-      if (!firestore) return;
-      const ref = doc(firestore, "notes", noteId);
-      await updateDoc(ref, {
+    async (noteId: string, updates: Partial<Note>) => {
+      const noteRef = doc(firestore, "notes", noteId);
+      await updateDoc(noteRef, {
         ...updates,
         updatedAt: new Date().toISOString(),
       });
@@ -57,11 +50,10 @@ export function useJennNotes(initialNotes: JennNote[] = []) {
     [firestore]
   );
 
-  const removeNote = React.useCallback(
+  const deleteNote = React.useCallback(
     async (noteId: string) => {
-      if (!firestore) return;
-      const ref = doc(firestore, "notes", noteId);
-      await deleteDoc(ref);
+      const noteRef = doc(firestore, "notes", noteId);
+      await deleteDoc(noteRef);
     },
     [firestore]
   );
@@ -72,6 +64,6 @@ export function useJennNotes(initialNotes: JennNote[] = []) {
     error,
     addNote,
     updateNote,
-    removeNote,
+    deleteNote,
   };
-}
+};

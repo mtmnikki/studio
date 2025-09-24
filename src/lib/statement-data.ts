@@ -20,10 +20,13 @@ export type StatementData = {
 };
 
 export function createFallbackPatient(claim: Claim): Patient {
-  const [firstName = "Patient", lastName = ""] = claim.patientName.split(" ");
+  const safeName = claim.patientName?.trim() || "Patient";
+  const [firstName = "Patient", ...rest] = safeName.split(" ");
+  const lastName = rest.join(" ");
+  const fallbackId = claim.patientId || claim.cardholderId || `claim-${claim.id}`;
 
   return {
-    id: claim.patientId,
+    id: fallbackId,
     firstName,
     lastName,
     dateOfBirth: "1900-01-01",
@@ -42,7 +45,7 @@ export async function fetchPatient(
   fallbackFromClaim?: Claim
 ): Promise<Patient | null> {
   if (!patientId) {
-    return null;
+    return fallbackFromClaim ? createFallbackPatient(fallbackFromClaim) : null;
   }
 
   const patientRef = doc(firestore, "patients", patientId);
@@ -59,6 +62,9 @@ export async function fetchClaimsForPatient(
   firestore: Firestore,
   patientId: string
 ): Promise<Claim[]> {
+  if (!patientId) {
+    return [];
+  }
   const claimsQuery = query(
     collection(firestore, "claims"),
     where("patientId", "==", patientId),
@@ -85,26 +91,31 @@ export async function fetchStatementDataByClaimId(
   }
 
   const initialClaim = { id: claimSnap.id, ...claimSnap.data() } as Claim;
+  const resolvedClaim: Claim = {
+    ...initialClaim,
+    patientId:
+      initialClaim.patientId ||
+      initialClaim.cardholderId ||
+      `claim-${initialClaim.id}`,
+    patientName: initialClaim.patientName || "Patient",
+  };
 
-  if (!initialClaim.patientId) {
-    return null;
-  }
-
-  const patient = await fetchPatient(
-    firestore,
-    initialClaim.patientId,
-    initialClaim
-  );
+  const patient =
+    (await fetchPatient(firestore, initialClaim.patientId ?? "", resolvedClaim)) ||
+    createFallbackPatient(resolvedClaim);
 
   if (!patient) {
     return null;
   }
 
-  const patientClaims = await fetchClaimsForPatient(firestore, patient.id);
+  const patientClaims = await fetchClaimsForPatient(
+    firestore,
+    patient.id
+  );
 
   const claimsForStatement = patientClaims.length
     ? patientClaims.filter((claim) => !claim.statementSent)
-    : [initialClaim];
+    : [resolvedClaim];
 
   return buildStatementData(patient, claimsForStatement, calculateAccountNumber);
 }
