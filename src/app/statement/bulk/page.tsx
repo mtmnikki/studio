@@ -8,7 +8,7 @@ import { ArrowLeft, Printer } from "lucide-react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import type { Claim, Patient } from "@/lib/types";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, Suspense } from "react";
 import { useFirestore } from "@/firebase";
 import { doc, getDoc } from "firebase/firestore";
 
@@ -165,8 +165,7 @@ function Statement({ data }: { data: StatementData }) {
   )
 }
 
-
-export default function BulkStatementPage() {
+function BulkStatementPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { toast } = useToast();
@@ -273,5 +272,13 @@ export default function BulkStatementPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function BulkStatementPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <BulkStatementPageContent />
+    </Suspense>
   );
 }
