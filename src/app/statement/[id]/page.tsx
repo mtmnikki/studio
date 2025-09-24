@@ -146,30 +146,34 @@ export default async function StatementPage({ params }: { params: { id: string }
           </section>
           
           {/* Remittance Slip */}
-          <div className="border-t border-dashed pt-6">
-            <div className="grid grid-cols-2 gap-8">
-                <div className="text-xs">
-                    <p className="font-bold text-sm">Account Number: {accountNumber}</p>
-                    <p className="font-bold text-sm">Amount Due: ${totalAmountDue.toFixed(2)}</p>
-                    <div className="flex items-center gap-4 mt-4">
-                        <label htmlFor="amount-enclosed" className="font-bold text-sm">Amount Enclosed</label>
-                        <div className="border h-8 w-32"></div>
-                    </div>
-                </div>
-                <div className="text-xs">
-                    <p className="font-bold">Make check payable to/Mail check to:</p>
-                    <p>Harps Pharmacy #144</p>
-                    <p>1120 E. German Ln</p>
-                    <p>Conway, AR 72032</p>
-                </div>
-            </div>
-             <div className="mt-4 text-xs">
-                    <p className="font-bold">{patient.firstName.toUpperCase()} {patient.lastName.toUpperCase()}</p>
-                    <p>{patient.address.street.toUpperCase()}</p>
-                    <p>{patient.address.city.toUpperCase()}, {patient.address.state.toUpperCase()} {patient.address.zip}</p>
+          <div className="border-t border-dashed pt-6 grid grid-cols-2 gap-8">
+            {/* Left side: Payment details */}
+            <div className="text-xs space-y-4">
+              <div>
+                <p className="font-bold text-sm">Account Number: {accountNumber}</p>
+                <p className="font-bold text-sm">Amount Due: ${totalAmountDue.toFixed(2)}</p>
               </div>
-          </div>
+              <div className="flex items-center gap-4">
+                <label htmlFor="amount-enclosed" className="font-bold text-sm">Amount Enclosed</label>
+                <div className="border h-8 w-32"></div>
+              </div>
+              <div>
+                <p className="font-bold">Make check payable to/Mail check to:</p>
+                <p>Harps Pharmacy #144</p>
+                <p>1120 E. German Ln</p>
+                <p>Conway, AR 72032</p>
+              </div>
+            </div>
 
+            {/* Right side: Mailing address for window envelope */}
+            <div className="text-xs">
+              <div className="pl-8 pt-12">
+                <p className="font-bold">{patient.firstName.toUpperCase()} {patient.lastName.toUpperCase()}</p>
+                <p>{patient.address.street.toUpperCase()}</p>
+                <p>{patient.address.city.toUpperCase()}, {patient.address.state.toUpperCase()} {patient.address.zip}</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
