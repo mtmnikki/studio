@@ -1,3 +1,5 @@
+"use client";
+
 import { notFound } from "next/navigation";
 import { calculateAccountNumber } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
