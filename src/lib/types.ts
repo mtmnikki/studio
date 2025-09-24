@@ -9,6 +9,10 @@ export interface Patient {
     state: string;
     zip: string;
   };
+  phone?: string;
+  email?: string;
+  status?: "Active" | "Inactive" | "Collections";
+  lastVisitAt?: string | null;
 }
 
 export interface Claim {
@@ -37,4 +41,33 @@ export interface Claim {
   statementSent2nd: boolean; // 2nd Statement Sent?
   statementSentAt?: string | null;
   statementSent2ndAt?: string | null;
+}
+
+export interface Pharmacy {
+  id: string;
+  name: string;
+  npi?: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
+  status?: "Active" | "Paused" | "Prospect";
+  services?: string[];
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+  };
+  notes?: string;
+  lastSyncAt?: string | null;
+}
+
+export interface JennNote {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+  tags?: string[];
+  mood?: "celebrate" | "todo" | "follow-up" | "idea";
 }
