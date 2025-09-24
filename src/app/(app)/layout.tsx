@@ -11,7 +11,6 @@ import {
   LogOut,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
