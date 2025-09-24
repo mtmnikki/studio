@@ -29,35 +29,36 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { MoreHorizontal, FileText, Trash2 } from "lucide-react";
+import { MoreHorizontal, FileText, Trash2, Edit, Save, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import type { Claim } from "@/lib/types";
 import { useClaims } from "@/hooks/use-claims";
 
 export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] }) {
-  const { claims, setClaims, getClaimStatus, removeClaims } = useClaims(initialClaims);
+  const { claims, setClaims, getClaimStatus, removeClaims, updateClaim } = useClaims(initialClaims);
   const { toast } = useToast();
   const router = useRouter();
 
   const [filter, setFilter] = React.useState<"all" | "needed" | "sent">("all");
   const [selectedClaimIds, setSelectedClaimIds] = React.useState<string[]>([]);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
+  const [editingClaimId, setEditingClaimId] = React.useState<string | null>(null);
+  const [editingData, setEditingData] = React.useState<Partial<Claim>>({});
 
   const filteredClaims = React.useMemo(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
-      const updatedClaimId = urlParams.get('updated');
-      const claimStatus = getClaimStatus(updatedClaimId);
-
-      if (updatedClaimId && claimStatus && !claimStatus.statementSent) {
+      const updatedPatientId = urlParams.get('updatedPatient');
+      if (updatedPatientId) {
         setTimeout(() => {
           setClaims(prevClaims => 
             prevClaims.map(c => 
-              c.id === updatedClaimId ? { ...c, statementSent: true } : c
+              c.patientId === updatedPatientId ? { ...c, statementSent: true } : c
             )
           );
           window.history.replaceState({}, document.title, window.location.pathname);
@@ -68,7 +69,7 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
     const claimsToFilter = claims;
     switch (filter) {
       case 'needed':
-        return claimsToFilter.filter(c => !c.statementSent);
+        return claimsToFilter.filter(c => !c.statementSent && c.patientPay > 0);
       case 'sent':
         return claimsToFilter.filter(c => c.statementSent);
       case 'all':
@@ -96,10 +97,35 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
       setSelectedClaimIds(prev => prev.filter(id => id !== claimId));
     }
   };
+  
+  const handleEdit = (claim: Claim) => {
+    setEditingClaimId(claim.id);
+    setEditingData(claim);
+  };
+  
+  const handleCancelEdit = () => {
+    setEditingClaimId(null);
+    setEditingData({});
+  };
+  
+  const handleSave = () => {
+    if (editingClaimId) {
+      updateClaim(editingData as Claim);
+      toast({
+        title: "Claim Updated",
+        description: "The claim has been successfully updated.",
+      });
+      handleCancelEdit();
+    }
+  };
+  
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setEditingData(prev => ({ ...prev, [name]: value }));
+  };
 
   const numSelected = selectedClaimIds.length;
   const isAllSelected = numSelected > 0 && numSelected === filteredClaims.length;
-  const isIndeterminate = numSelected > 0 && numSelected < filteredClaims.length;
 
   const handleDeleteSelected = () => {
     removeClaims(selectedClaimIds);
@@ -114,8 +140,48 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
   const handleGenerateStatements = () => {
     const selectedClaims = claims.filter(c => selectedClaimIds.includes(c.id));
     const patientIds = [...new Set(selectedClaims.map(c => c.patientId))];
-    const query = new URLSearchParams({ p: patientIds }).toString();
+    const query = new URLSearchParams(patientIds.map(id => ['p', id])).toString();
     router.push(`/statement/bulk?${query}`);
+  };
+
+  const renderCell = (claim: Claim, field: keyof Claim) => {
+    if (editingClaimId === claim.id) {
+      const value = editingData[field] as string | number;
+      if (typeof claim[field] === 'boolean') {
+          return (
+             <Checkbox
+                name={field}
+                checked={editingData[field] as boolean}
+                onCheckedChange={(checked) => setEditingData(prev => ({ ...prev, [field]: checked }))}
+              />
+          )
+      }
+      return (
+        <Input
+          name={field}
+          value={value}
+          onChange={handleInputChange}
+          className="h-8"
+        />
+      );
+    }
+    
+    const cellValue = claim[field];
+    if (typeof cellValue === 'boolean') {
+      return (
+        <Badge variant={cellValue ? 'default' : 'outline'}>
+          {cellValue ? 'Yes' : 'No'}
+        </Badge>
+      );
+    }
+     if (typeof cellValue === 'number' && ['amount', 'paid', 'adjustment', 'patientPay'].includes(field)) {
+      return `$${cellValue.toFixed(2)}`;
+    }
+    if (field.toLowerCase().includes('date')) {
+        return new Date(cellValue as string).toLocaleDateString();
+    }
+
+    return cellValue;
   };
 
 
@@ -149,110 +215,116 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
             <CardTitle>Claims</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead padding="checkbox">
-                    <Checkbox
-                      checked={isAllSelected}
-                      onCheckedChange={(checked) => handleSelectAll(Boolean(checked))}
-                      aria-label="Select all"
-                    />
-                  </TableHead>
-                  <TableHead className="whitespace-nowrap">Check Date</TableHead>
-                  <TableHead className="whitespace-nowrap">Check #</TableHead>
-                  <TableHead className="whitespace-nowrap">NPI</TableHead>
-                  <TableHead className="whitespace-nowrap">Payee</TableHead>
-                  <TableHead className="whitespace-nowrap">Payer</TableHead>
-                  <TableHead className="whitespace-nowrap">Rx #</TableHead>
-                  <TableHead className="whitespace-nowrap">DOS</TableHead>
-                  <TableHead className="whitespace-nowrap">Cardholder ID</TableHead>
-                  <TableHead className="whitespace-nowrap">Patient</TableHead>
-                  <TableHead className="whitespace-nowrap">Service</TableHead>
-                  <TableHead className="whitespace-nowrap">CPT/HCPCS</TableHead>
-                  <TableHead className="whitespace-nowrap">Billed</TableHead>
-                  <TableHead className="whitespace-nowrap">Paid</TableHead>
-                  <TableHead className="whitespace-nowrap">Adjustment</TableHead>
-                  <TableHead className="whitespace-nowrap">Patient Pay</TableHead>
-                  <TableHead className="whitespace-nowrap">Payment Status</TableHead>
-                  <TableHead className="whitespace-nowrap">Posting Status</TableHead>
-                  <TableHead className="whitespace-nowrap">Workflow</TableHead>
-                  <TableHead className="whitespace-nowrap">Notes</TableHead>
-                  <TableHead className="whitespace-nowrap">1st Stmt Sent?</TableHead>
-                  <TableHead>
-                    <span className="sr-only">Actions</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredClaims.length > 0 ? (
-                  filteredClaims.map((claim) => (
-                    <TableRow key={claim.id} data-state={selectedClaimIds.includes(claim.id) ? "selected" : ""}>
-                       <TableCell padding="checkbox">
-                        <Checkbox
-                          checked={selectedClaimIds.includes(claim.id)}
-                          onCheckedChange={(checked) => handleSelectRow(claim.id, Boolean(checked))}
-                          aria-label={`Select claim ${claim.id}`}
-                        />
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">{new Date(claim.checkDate).toLocaleDateString()}</TableCell>
-                      <TableCell className="whitespace-nowrap">{claim.checkNumber}</TableCell>
-                      <TableCell className="whitespace-nowrap">{claim.npi}</TableCell>
-                      <TableCell className="whitespace-nowrap">{claim.payee}</TableCell>
-                      <TableCell className="whitespace-nowrap">{claim.payer}</TableCell>
-                      <TableCell className="whitespace-nowrap">{claim.rx}</TableCell>
-                      <TableCell className="whitespace-nowrap">{new Date(claim.serviceDate).toLocaleDateString()}</TableCell>
-                      <TableCell className="whitespace-nowrap">{claim.cardholderId}</TableCell>
-                      <TableCell className="font-medium whitespace-nowrap">{claim.patientName}</TableCell>
-                      <TableCell className="whitespace-nowrap">{claim.serviceDescription}</TableCell>
-                      <TableCell className="whitespace-nowrap">{claim.productId}</TableCell>
-                      <TableCell className="whitespace-nowrap">${claim.amount.toFixed(2)}</TableCell>
-                      <TableCell className="whitespace-nowrap">${claim.paid.toFixed(2)}</TableCell>
-                      <TableCell className="whitespace-nowrap">${claim.adjustment.toFixed(2)}</TableCell>
-                      <TableCell className="whitespace-nowrap">${claim.patientPay.toFixed(2)}</TableCell>
-                      <TableCell>
-                        <Badge variant={claim.paymentStatus === 'PAID' ? "secondary" : "destructive"}>
-                          {claim.paymentStatus}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">{claim.postingStatus}</TableCell>
-                      <TableCell className="whitespace-nowrap">{claim.workflow}</TableCell>
-                      <TableCell className="whitespace-nowrap">{claim.notes}</TableCell>
-                      <TableCell>
-                        <Badge variant={claim.statementSent ? 'default' : 'outline'}>
-                          {claim.statementSent ? 'Yes' : 'No'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button aria-haspopup="true" size="icon" variant="ghost">
-                              <MoreHorizontal className="h-4 w-4" />
-                              <span className="sr-only">Toggle menu</span>
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem asChild>
-                              <Link href={`/statement/${claim.id}`}>
-                                <FileText className="mr-2 h-4 w-4" />
-                                Generate Statement
-                              </Link>
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+            <div className="relative overflow-x-auto">
+              <Table className="min-w-max">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      <Checkbox
+                        checked={isAllSelected}
+                        onCheckedChange={(checked) => handleSelectAll(Boolean(checked))}
+                        aria-label="Select all"
+                      />
+                    </TableHead>
+                    <TableHead className="whitespace-nowrap">Check Date</TableHead>
+                    <TableHead className="whitespace-nowrap">Check #</TableHead>
+                    <TableHead className="whitespace-nowrap">NPI</TableHead>
+                    <TableHead className="whitespace-nowrap">Payee</TableHead>
+                    <TableHead className="whitespace-nowrap">Payer</TableHead>
+                    <TableHead className="whitespace-nowrap">Rx #</TableHead>
+                    <TableHead className="whitespace-nowrap">DOS</TableHead>
+                    <TableHead className="whitespace-nowrap">Cardholder ID</TableHead>
+                    <TableHead className="whitespace-nowrap">Patient</TableHead>
+                    <TableHead className="whitespace-nowrap">Service</TableHead>
+                    <TableHead className="whitespace-nowrap">CPT/HCPCS</TableHead>
+                    <TableHead className="whitespace-nowrap text-right">Billed</TableHead>
+                    <TableHead className="whitespace-nowrap text-right">Paid</TableHead>
+                    <TableHead className="whitespace-nowrap text-right">Adjustment</TableHead>
+                    <TableHead className="whitespace-nowrap text-right">Patient Pay</TableHead>
+                    <TableHead className="whitespace-nowrap">Payment Status</TableHead>
+                    <TableHead className="whitespace-nowrap">Posting Status</TableHead>
+                    <TableHead className="whitespace-nowrap">Workflow</TableHead>
+                    <TableHead className="whitespace-nowrap">Notes</TableHead>
+                    <TableHead className="whitespace-nowrap">1st Stmt Sent?</TableHead>
+                    <TableHead>
+                      <span className="sr-only">Actions</span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredClaims.length > 0 ? (
+                    filteredClaims.map((claim) => (
+                      <TableRow key={claim.id} data-state={selectedClaimIds.includes(claim.id) ? "selected" : ""}>
+                         <TableCell>
+                          <Checkbox
+                            checked={selectedClaimIds.includes(claim.id)}
+                            onCheckedChange={(checked) => handleSelectRow(claim.id, Boolean(checked))}
+                            aria-label={`Select claim ${claim.id}`}
+                          />
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'checkDate')}</TableCell>
+                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'checkNumber')}</TableCell>
+                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'npi')}</TableCell>
+                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'payee')}</TableCell>
+                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'payer')}</TableCell>
+                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'rx')}</TableCell>
+                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'serviceDate')}</TableCell>
+                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'cardholderId')}</TableCell>
+                        <TableCell className="font-medium whitespace-nowrap">{renderCell(claim, 'patientName')}</TableCell>
+                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'serviceDescription')}</TableCell>
+                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'productId')}</TableCell>
+                        <TableCell className="whitespace-nowrap text-right">{renderCell(claim, 'amount')}</TableCell>
+                        <TableCell className="whitespace-nowrap text-right">{renderCell(claim, 'paid')}</TableCell>
+                        <TableCell className="whitespace-nowrap text-right">{renderCell(claim, 'adjustment')}</TableCell>
+                        <TableCell className="whitespace-nowrap text-right">{renderCell(claim, 'patientPay')}</TableCell>
+                        <TableCell>
+                          {editingClaimId === claim.id ? renderCell(claim, 'paymentStatus') : <Badge variant={claim.paymentStatus === 'PAID' ? "secondary" : "destructive"}>{claim.paymentStatus}</Badge>}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'postingStatus')}</TableCell>
+                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'workflow')}</TableCell>
+                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'notes')}</TableCell>
+                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'statementSent')}</TableCell>
+                        <TableCell>
+                           {editingClaimId === claim.id ? (
+                            <div className="flex items-center gap-2">
+                              <Button onClick={handleSave} size="icon" variant="ghost"><Save className="h-4 w-4" /></Button>
+                              <Button onClick={handleCancelEdit} size="icon" variant="ghost"><XCircle className="h-4 w-4" /></Button>
+                            </div>
+                          ) : (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button aria-haspopup="true" size="icon" variant="ghost">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                  <span className="sr-only">Toggle menu</span>
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                <DropdownMenuItem onClick={() => handleEdit(claim)}>
+                                  <Edit className="mr-2 h-4 w-4" /> Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                  <Link href={`/statement/${claim.id}`}>
+                                    <FileText className="mr-2 h-4 w-4" />
+                                    Generate Statement
+                                  </Link>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={22} className="h-24 text-center">
+                        No claims found for this filter.
                       </TableCell>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={22} className="h-24 text-center">
-                      No claims found for this filter.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       </TabsContent>

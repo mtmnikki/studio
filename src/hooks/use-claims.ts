@@ -8,6 +8,7 @@ type ClaimsState = {
   claims: Claim[];
   setClaims: (claims: Claim[] | ((prev: Claim[]) => Claim[])) => void;
   addClaims: (newClaims: Claim[]) => void;
+  updateClaim: (updatedClaim: Claim) => void;
   removeClaims: (claimIds: string[]) => void;
   getClaimStatus: (claimId: string | null) => { statementSent: boolean } | null;
 };
@@ -24,6 +25,13 @@ const useClaimsStore = create<ClaimsState>((set, get) => ({
   addClaims: (newClaims) => {
     set((state) => ({
       claims: [...state.claims, ...newClaims],
+    }));
+  },
+  updateClaim: (updatedClaim) => {
+    set((state) => ({
+      claims: state.claims.map((claim) =>
+        claim.id === updatedClaim.id ? updatedClaim : claim
+      ),
     }));
   },
   removeClaims: (claimIds) => {
