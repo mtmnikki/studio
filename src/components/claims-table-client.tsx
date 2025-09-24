@@ -69,7 +69,7 @@ const formatDate = (dateString: string) => {
 }
 
 
-export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] }) {
+export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Claim[] }) {
   const { claims, removeClaims, updateClaim } = useClaims(initialClaims);
   const { toast } = useToast();
   const router = useRouter();
@@ -115,6 +115,24 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
   const handleFieldChange = (claimId: string, field: keyof Claim, value: any) => {
     const claim = claims.find(c => c.id === claimId);
     if (claim) {
+      if (field === "statementSent") {
+        updateClaim({
+          ...claim,
+          statementSent: Boolean(value),
+          statementSentAt: value ? new Date().toISOString() : null,
+        });
+        return;
+      }
+
+      if (field === "statementSent2nd") {
+        updateClaim({
+          ...claim,
+          statementSent2nd: Boolean(value),
+          statementSent2ndAt: value ? new Date().toISOString() : null,
+        });
+        return;
+      }
+
       updateClaim({ ...claim, [field]: value });
     }
   };
@@ -306,7 +324,9 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
                     <TableHead className="whitespace-nowrap">Workflow</TableHead>
                     <TableHead className="whitespace-nowrap">Notes</TableHead>
                     <TableHead className="whitespace-nowrap text-center">1st Stmt Sent?</TableHead>
+                    <TableHead className="whitespace-nowrap text-center">1st Sent Date</TableHead>
                     <TableHead className="whitespace-nowrap text-center">2nd Stmt Sent?</TableHead>
+                    <TableHead className="whitespace-nowrap text-center">2nd Sent Date</TableHead>
                     <TableHead>
                       <span className="sr-only">Actions</span>
                     </TableHead>
@@ -343,7 +363,13 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
                         <TableCell className="whitespace-nowrap">{renderCell(claim, 'workflow')}</TableCell>
                         <TableCell className="whitespace-nowrap">{renderCell(claim, 'notes')}</TableCell>
                         <TableCell className="whitespace-nowrap text-center">{renderCell(claim, 'statementSent')}</TableCell>
+                        <TableCell className="whitespace-nowrap text-center">
+                          {claim.statementSentAt ? formatDate(claim.statementSentAt) : "—"}
+                        </TableCell>
                         <TableCell className="whitespace-nowrap text-center">{renderCell(claim, 'statementSent2nd')}</TableCell>
+                        <TableCell className="whitespace-nowrap text-center">
+                          {claim.statementSent2ndAt ? formatDate(claim.statementSent2ndAt) : "—"}
+                        </TableCell>
                         <TableCell>
                             <div className="flex items-center">
                               <DropdownMenu>

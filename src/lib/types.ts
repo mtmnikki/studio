@@ -35,4 +35,6 @@ export interface Claim {
   notes: string;
   statementSent: boolean; // 1st Statement Sent?
   statementSent2nd: boolean; // 2nd Statement Sent?
+  statementSentAt?: string | null;
+  statementSent2ndAt?: string | null;
 }

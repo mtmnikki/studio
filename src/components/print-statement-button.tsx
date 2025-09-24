@@ -1,32 +1,94 @@
 "use client";
 
+import * as React from "react";
+
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Printer } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { initializeFirebase } from "@/firebase";
+import { markClaimsStatementStatus } from "@/lib/statement-actions";
 
-export function PrintStatementButton({ claimId, patientId }: { claimId: string, patientId: string }) {
+type PrintStatementButtonProps = {
+  claimIds: string[];
+  patientId: string;
+  statement?: "first" | "second";
+  redirectTo?: string;
+};
+
+export function PrintStatementButton({
+  claimIds,
+  patientId,
+  statement = "first",
+  redirectTo = "/dashboard",
+}: PrintStatementButtonProps) {
   const { toast } = useToast();
   const router = useRouter();
-  
-  const handlePrintAndMarkSent = () => {
-    // We pass the patient ID to the dashboard now, to mark all their claims as sent.
-    // In a real app, this would be an API call.
-    toast({
-      title: "Statement Status Updated",
-      description: "The patient's claims have been marked as '1st Statement Sent'.",
-    });
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-    setTimeout(() => {
+  const buildRedirectUrl = React.useCallback(() => {
+    try {
+      const url = new URL(redirectTo, window.location.origin);
+      url.searchParams.set("updatedPatient", patientId);
+      return url.pathname + (url.search ? `?${url.searchParams.toString()}` : "");
+    } catch {
+      return `${redirectTo}?updatedPatient=${patientId}`;
+    }
+  }, [redirectTo, patientId]);
+
+  const handlePrintAndMarkSent = async () => {
+    if (!claimIds.length) {
+      toast({
+        title: "No claims available",
+        description: "There are no claims to update for this patient.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const { firestore } = initializeFirebase();
+
+    if (!firestore) {
+      toast({
+        title: "Firestore unavailable",
+        description: "We couldn't connect to Firestore. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await markClaimsStatementStatus(firestore, claimIds, { statement });
+
+      toast({
+        title: "Statement status updated",
+        description:
+          statement === "second"
+            ? "The patient's claims were marked as having a second statement sent."
+            : "The patient's claims were marked as having a first statement sent.",
+      });
+
+      setTimeout(() => {
         window.print();
-        router.push(`/dashboard?updatedPatient=${patientId}`);
-    }, 200);
+        router.push(buildRedirectUrl());
+      }, 250);
+    } catch (error) {
+      console.error("Failed to mark statements as sent", error);
+      toast({
+        title: "Unable to update statement",
+        description: "An unexpected error occurred while updating the claim records.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <Button onClick={handlePrintAndMarkSent}>
+    <Button onClick={handlePrintAndMarkSent} disabled={isSubmitting}>
       <Printer className="mr-2 h-4 w-4" />
-      Print & Mark as Sent
+      {isSubmitting ? "Updating..." : "Print & Mark as Sent"}
     </Button>
   );
 }
