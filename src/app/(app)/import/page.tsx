@@ -48,15 +48,24 @@ export default function ImportPage() {
             // In a real app, this would be handled by a database.
             const newId = `clm_imported_${Date.now()}_${index}`;
             const patientId = `pat_imported_${Date.now()}_${index}`;
+            
+            const parseDate = (dateString: string) => {
+              if (!dateString) return '';
+              const date = new Date(dateString);
+              // Adding timezone offset to avoid date changes
+              const userTimezoneOffset = date.getTimezoneOffset() * 60000;
+              return new Date(date.getTime() + userTimezoneOffset).toISOString().split('T')[0];
+            }
+
             return {
               id: newId,
-              checkDate: row["Check Date"] ? new Date(row["Check Date"]).toISOString().split('T')[0] : '',
+              checkDate: parseDate(row["Check Date"]),
               checkNumber: row["Check #"] || '',
               npi: row["NPI"] || '',
               payee: row["Payee"] || '',
               payer: row["Payer"] || '',
               rx: row["Rx"] || '',
-              serviceDate: row["DOS"] ? new Date(row["DOS"]).toISOString().split('T')[0] : '',
+              serviceDate: parseDate(row["DOS"]),
               cardholderId: row["Cardholder ID"] || '',
               patientName: row["Patient"] || 'Unknown',
               patientId: patientId, // Assign a temporary patientId

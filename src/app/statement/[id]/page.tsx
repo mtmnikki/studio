@@ -47,6 +47,15 @@ function getStatementDataForPatient(patient: Patient, initialClaim: Claim) {
   return { claims: claimsForStatement, patient, accountNumber, totalAmountDue };
 }
 
+function formatDate(date: Date) {
+    return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        timeZone: 'UTC', // Use UTC to avoid timezone differences
+    });
+}
+
 
 export default async function StatementPage({ params }: { params: { id: string } }) {
   const data = await getStatementData(params.id);
@@ -107,9 +116,9 @@ export default async function StatementPage({ params }: { params: { id: string }
               </thead>
               <tbody>
                 <tr>
-                  <td className="p-2 border-r">{statementDate.toLocaleDateString()}</td>
+                  <td className="p-2 border-r">{formatDate(statementDate)}</td>
                   <td className="p-2 border-r font-mono">{accountNumber}</td>
-                  <td className="p-2 border-r">{paymentDueDate.toLocaleDateString()}</td>
+                  <td className="p-2 border-r">{formatDate(paymentDueDate)}</td>
                   <td className="p-2 font-bold">${totalAmountDue.toFixed(2)}</td>
                 </tr>
               </tbody>
@@ -132,7 +141,7 @@ export default async function StatementPage({ params }: { params: { id: string }
               <tbody>
                 {statementClaims.map(claim => (
                   <tr key={claim.id} className="border-b">
-                    <td className="p-2 border-r">{new Date(claim.serviceDate).toLocaleDateString()}</td>
+                    <td className="p-2 border-r">{formatDate(new Date(claim.serviceDate))}</td>
                     <td className="p-2 border-r">{claim.productId}– {claim.serviceDescription}</td>
                     <td className="p-2 text-right border-r">${claim.amount.toFixed(2)}</td>
                     <td className="p-2 text-right border-r">${claim.paid.toFixed(2)}</td>

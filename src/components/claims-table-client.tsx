@@ -30,7 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { MoreHorizontal, FileText, Trash2, Edit, Save, XCircle } from "lucide-react";
+import { MoreHorizontal, FileText, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -50,8 +50,24 @@ const noteOptions = [
     "Reversed Claim",
 ];
 
+const formatDate = (dateString: string) => {
+    if (!dateString) return '';
+    // Dates are stored as 'YYYY-MM-DD', which JS new Date() interprets as UTC.
+    // toLocaleDateString() will then use the runtime's timezone.
+    // By creating the date from parts, we can make it locale-independent.
+    const parts = dateString.split('-');
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1; // month is 0-indexed
+      const day = parseInt(parts[2], 10);
+      return new Date(year, month, day).toLocaleDateString();
+    }
+    return dateString; // Fallback for unexpected formats
+}
+
+
 export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] }) {
-  const { claims, setClaims, removeClaims, updateClaim } = useClaims(initialClaims);
+  const { claims, removeClaims, updateClaim } = useClaims(initialClaims);
   const { toast } = useToast();
   const router = useRouter();
 
@@ -186,7 +202,7 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
       return `$${cellValue.toFixed(2)}`;
     }
     if (field.toLowerCase().includes('date') && cellValue) {
-        return new Date(cellValue as string).toLocaleDateString();
+        return formatDate(cellValue as string);
     }
 
     return cellValue as React.ReactNode;
@@ -196,7 +212,12 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
   return (
     <Tabs defaultValue="all" onValueChange={(value) => setFilter(value as any)}>
       <div className="flex items-center gap-4">
-        {numSelected > 0 ? (
+        <TabsList>
+          <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="needed">Statement Needed</TabsTrigger>
+          <TabsTrigger value="sent">Statement Sent</TabsTrigger>
+        </TabsList>
+        {numSelected > 0 && (
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">{numSelected} selected</span>
             <Button variant="outline" size="sm" onClick={handleGenerateStatements}>
@@ -208,12 +229,6 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
               Delete ({numSelected})
             </Button>
           </div>
-        ) : (
-          <TabsList>
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="needed">Statement Needed</TabsTrigger>
-            <TabsTrigger value="sent">Statement Sent</TabsTrigger>
-          </TabsList>
         )}
       </div>
       <TabsContent value={filter}>
@@ -270,13 +285,13 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
                             aria-label={`Select claim ${claim.id}`}
                           />
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">{claim.checkDate ? new Date(claim.checkDate).toLocaleDateString() : ''}</TableCell>
+                        <TableCell className="whitespace-nowrap">{formatDate(claim.checkDate)}</TableCell>
                         <TableCell className="whitespace-nowrap">{claim.checkNumber}</TableCell>
                         <TableCell className="whitespace-nowrap">{claim.npi}</TableCell>
                         <TableCell className="whitespace-nowrap">{claim.payee}</TableCell>
                         <TableCell className="whitespace-nowrap">{claim.payer}</TableCell>
                         <TableCell className="whitespace-nowrap">{claim.rx}</TableCell>
-                        <TableCell className="whitespace-nowrap">{claim.serviceDate ? new Date(claim.serviceDate).toLocaleDateString() : ''}</TableCell>
+                        <TableCell className="whitespace-nowrap">{formatDate(claim.serviceDate)}</TableCell>
                         <TableCell className="whitespace-nowrap">{claim.cardholderId}</TableCell>
                         <TableCell className="font-medium whitespace-nowrap">{claim.patientName}</TableCell>
                         <TableCell className="whitespace-nowrap">{claim.serviceDescription}</TableCell>
