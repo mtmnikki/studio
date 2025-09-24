@@ -10,15 +10,12 @@ export function ClaimsSummary({ initialClaims = [] }: { initialClaims?: Claim[] 
     const { claims } = useClaims(initialClaims);
 
     const summary = useMemo(() => {
-        const safeClaims = claims ?? [];
-        const statementsNeeded = safeClaims.filter(c => !c.statementSent).length;
-        const statementsSent = safeClaims.length - statementsNeeded;
-        const totalOutstanding = safeClaims
-          .filter(c => !c.statementSent)
-          .reduce((acc, c) => acc + c.amount, 0);
-        return { statementsNeeded, statementsSent, totalOutstanding, totalClaims: safeClaims.length };
-    }, [claims]);
-
+      const safeClaims = claims || [];
+      const statementsNeeded = safeClaims.filter(c => !c.statementSent).length;
+      const statementsSent = safeClaims.length - statementsNeeded;
+      const totalOutstanding = safeClaims.filter(c => !c.statementSent).reduce((acc, c) => acc + c.amount, 0);
+      return { statementsNeeded, statementsSent, totalOutstanding, totalClaims: safeClaims.length };
+  }, [claims]);
 
     return (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
