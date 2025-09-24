@@ -10,6 +10,7 @@ import Papa from "papaparse";
 import { useClaims } from "@/hooks/use-claims";
 import { useRouter } from "next/navigation";
 import type { Claim } from "@/lib/types";
+import { parseBooleanFlag, parseCurrency } from "@/lib/utils";
 
 export default function ImportPage() {
   const { toast } = useToast();
@@ -62,7 +63,7 @@ export default function ImportPage() {
       // @ts-ignore
       complete: async (results: { data: any[] }) => {
         try {
-          const newClaims: Omit<Claim, 'id'>[] = results.data.map((row: any, index: number) => {
+          const newClaims: Omit<Claim, "id">[] = results.data.map((row: any, index: number) => {
             
             const parseDate = (dateString: string) => {
               if (!dateString) return new Date().toISOString().split('T')[0];
@@ -98,8 +99,8 @@ export default function ImportPage() {
               postingStatus: row["Posting Status"] || 'Unposted',
               workflow: row["Workflow"] || 'New',
               notes: row["Notes"] || '',
-              statementSent: row["1st Statement Sent?"]?.toLowerCase() === 'true',
-              statementSent2nd: row["2nd Statement Sent?"]?.toLowerCase() === 'true',
+              statementSent: parseBooleanFlag(row["1st Statement Sent?"]),
+              statementSent2nd: parseBooleanFlag(row["2nd Statement Sent?"]),
             };
           });
 
@@ -115,7 +116,7 @@ export default function ImportPage() {
           
           setSelectedFile(null);
           const fileInput = document.getElementById('csv-upload') as HTMLInputElement;
-          if(fileInput) fileInput.value = '';
+          if (fileInput) fileInput.value = '';
 
           // Redirect to the dashboard to see the new data
           setTimeout(() => router.push('/dashboard'), 1500);
