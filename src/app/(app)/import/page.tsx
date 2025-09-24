@@ -3,51 +3,88 @@
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
+import Papa from "papaparse";
 
 export default function ImportPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files.length > 0) {
+      setSelectedFile(event.target.files[0]);
+    }
+  };
 
   const handleProcessData = () => {
-    setIsLoading(true);
-    // In a real app, you would parse the textarea content
-    // and create new claim records. Here we simulate a delay.
-    setTimeout(() => {
-      setIsLoading(false);
+    if (!selectedFile) {
       toast({
-        title: "Data Processed",
-        description: "Successfully simulated processing of claim data.",
-        variant: "default",
-        className: "bg-accent text-accent-foreground"
+        title: "No File Selected",
+        description: "Please select a CSV file to process.",
+        variant: "destructive",
       });
-    }, 1500);
+      return;
+    }
+
+    setIsLoading(true);
+
+    Papa.parse(selectedFile, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        console.log("Parsed CSV data:", results.data);
+        // In a real app, you would process results.data and create new claim records.
+        // For example, sending it to an API endpoint.
+        setIsLoading(false);
+        toast({
+          title: "File Processed",
+          description: `Successfully parsed ${results.data.length} records from ${selectedFile.name}.`,
+          variant: "default",
+          className: "bg-accent text-accent-foreground"
+        });
+        setSelectedFile(null);
+        // Reset the file input
+        const fileInput = document.getElementById('csv-upload') as HTMLInputElement;
+        if(fileInput) fileInput.value = '';
+      },
+      error: (error: any) => {
+        setIsLoading(false);
+        toast({
+          title: "Error Parsing File",
+          description: error.message,
+          variant: "destructive",
+        });
+      },
+    });
   };
 
   return (
     <>
       <PageHeader
         title="Import Data"
-        description="Paste data from TransactRx to create new claims."
+        description="Upload a CSV file to create new claims."
       />
       <Card>
         <CardHeader>
-          <CardTitle>Extract Claim Data</CardTitle>
+          <CardTitle>Upload Claim Data</CardTitle>
           <CardDescription>
-            Paste the raw text from the 'Check Detail' view in the TransactRx portal below. The app will automatically extract claims.
+            Select a CSV file containing the claim data. The app will automatically extract and process the claims.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Textarea
-            placeholder="Paste your claim data here..."
-            className="min-h-[300px] font-mono text-sm"
+          <Input
+            id="csv-upload"
+            type="file"
+            accept=".csv"
+            onChange={handleFileChange}
             disabled={isLoading}
           />
         </CardContent>
         <CardFooter className="border-t px-6 py-4">
-          <Button onClick={handleProcessData} disabled={isLoading}>
+          <Button onClick={handleProcessData} disabled={isLoading || !selectedFile}>
             {isLoading ? "Processing..." : "Process Data"}
           </Button>
         </CardFooter>
