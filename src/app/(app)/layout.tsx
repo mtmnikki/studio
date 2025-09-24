@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -5,6 +6,7 @@ import {
   Home,
 } from "lucide-react";
 import Link from "next/link";
+import React from "react";
 
 import {
   Tooltip,
@@ -13,11 +15,30 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Logo } from "@/components/icons";
-import { FirebaseClientProvider } from "@/firebase/client-provider";
+import { FirebaseClientProvider, useAuth, useUser } from "@/firebase";
+import { initiateAnonymousSignIn } from "@/firebase/non-blocking-login";
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+function AppAuthenticatedLayout({ children }: { children: React.ReactNode }) {
+  const auth = useAuth();
+  const { user, isUserLoading } = useUser();
+
+  React.useEffect(() => {
+    // If user is not logged in and not loading, sign in anonymously.
+    if (!user && !isUserLoading) {
+      initiateAnonymousSignIn(auth);
+    }
+  }, [user, isUserLoading, auth]);
+
+  if (isUserLoading) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
+
   return (
-    <FirebaseClientProvider>
       <div className="flex min-h-screen w-full flex-col bg-muted/40">
         <aside className="fixed inset-y-0 left-0 z-10 hidden w-14 flex-col border-r bg-background sm:flex">
           <nav className="flex flex-col items-center gap-4 px-2 sm:py-5">
@@ -62,6 +83,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </main>
         </div>
       </div>
+  )
+}
+
+
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <FirebaseClientProvider>
+      <AppAuthenticatedLayout>{children}</AppAuthenticatedLayout>
     </FirebaseClientProvider>
   );
 }

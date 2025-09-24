@@ -1,84 +1,54 @@
 /**
- * @fileoverview Firestore Security Rules for Jenn's Dream Billing Platform.
- *
- * Core Philosophy:
- * This ruleset enforces a strict user-ownership model for patient data and associated claims. Only the authenticated user whose ID matches the patient ID can access patient and claim data.
+ * @file Firestore Security Rules
+ * @description This ruleset enforces a public read policy for claims, allowing any user to view claim data, while restricting write access to only authenticated users. Patient data is also readable by anyone.
  *
  * Data Structure:
- * - /patients/{patientId}: Stores patient information. The patientId is the unique identifier for the patient and matches the authenticated user's UID.
- * - /patients/{patientId}/claims/{claimId}: Stores claim information associated with a specific patient.
+ * - /claims/{claimId}: Stores individual claim records.
+ * - /patients/{patientId}: Stores individual patient records.
  *
  * Key Security Decisions:
- * - User listing is disallowed.
- * - Read and write access to patients and their claims is restricted to the owner (the authenticated user with matching patient ID).
- * - Data validation is limited to ensuring that the `patientId` in claim documents matches the `patientId` in the path, enforcing relational integrity.
- *
- * Denormalization for Authorization:
- * The `claim` documents do not need to explicitly copy the `patientId` from the path. The path contains the patientId and can be used to validate the request.
- *
- * Structural Segregation:
- * There is no public/private segregation. All data is considered private and requires authentication.
+ * - Claims are publicly readable to support open data access.
+ * - Only authenticated users can create, update, or delete claims.
+ * - Patients are publicly readable to support open data access.
+ * - Write access to patient data is denied.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Controls access to patient documents.
-     * @path /patients/{patientId}
-     * @allow (create) Authenticated user creates a patient document with an ID matching their UID.
-     * @allow (get, list, update, delete) Authenticated user reads, updates, or deletes their own patient document.
-     * @deny (create) Authenticated user attempts to create a patient document with an ID different from their UID.
-     * @deny (get, list, update, delete) Unauthenticated user attempts to access patient data.
-     * @principle Enforces document ownership for reads and writes.
+     * @description Allows anyone to read claim data, but restricts write operations to authenticated users only.
+     * @path /claims/{claimId}
+     * @allow (get, list): Any user can read claim data.
+     * @allow (create): An authenticated user can create a claim.
+     * @deny (create): An unauthenticated user cannot create a claim.
+     * @allow (update, delete): An authenticated user can update or delete a claim.
+     * @deny (update, delete): An unauthenticated user cannot update or delete a claim.
+     * @principle Allows public read access while securing write operations.
      */
-    match /patients/{patientId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      function isOwner(patientId) {
-        return request.auth.uid == patientId;
-      }
-
-      function isExistingOwner(patientId) {
-        return isOwner(patientId) && resource != null;
-      }
-
-      allow get: if isOwner(patientId);
-      allow list: if false;
-      allow create: if isSignedIn() && isOwner(patientId);
-      allow update: if isExistingOwner(patientId);
-      allow delete: if isExistingOwner(patientId);
+    match /claims/{claimId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && resource != null;
     }
 
     /**
-     * @description Controls access to claim documents nested under a patient.
-     * @path /patients/{patientId}/claims/{claimId}
-     * @allow (create) Authenticated user creates a claim document under their patient document.
-     * @allow (get, list, update, delete) Authenticated user reads, updates, or deletes a claim document under their patient document.
-     * @deny (create) Authenticated user attempts to create a claim document under a different patient document.
-     * @deny (get, list, update, delete) Unauthenticated user attempts to access claim data.
-     * @principle Enforces document ownership and relational integrity for nested claim documents.
+     * @description Allows anyone to read patient data, but write operations are forbidden.
+     * @path /patients/{patientId}
+     * @allow (get, list): Any user can read patient data.
+     * @deny (create, update, delete): No one can create, update, or delete patient data.
+     * @principle Enforces read-only access to patient data.
      */
-    match /patients/{patientId}/claims/{claimId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
+    match /patients/{patientId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
 
-      function isOwner(patientId) {
-        return request.auth.uid == patientId;
-      }
-
-      function isExistingOwner(patientId) {
-        return isOwner(patientId) && resource != null;
-      }
-
-      allow get: if isOwner(patientId);
-      allow list: if isOwner(patientId);
-      allow create: if isSignedIn() && isOwner(patientId);
-      allow update: if isExistingOwner(patientId);
-      allow delete: if isExistingOwner(patientId);
+    /**
+     * @description Checks if the user is signed in.
+     */
+    function isSignedIn() {
+      return request.auth != null;
     }
   }
 }
