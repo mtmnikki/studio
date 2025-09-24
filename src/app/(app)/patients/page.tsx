@@ -402,7 +402,7 @@ export default function PatientsPage() {
                         <p className="mt-1 whitespace-pre-line">
                           {
                             selectedDashboard.patient.address?.street ||
-                              "No address on file"
+                            "No address on file"
                           }
                           {(() => {
                             const secondaryLine = [
