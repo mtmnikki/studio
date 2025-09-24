@@ -14,11 +14,15 @@ export const useClaims = (initialClaims: Claim[] = []) => {
     return collection(firestore, 'claims');
   }, [firestore]);
 
-  const { data: claims = [], isLoading, error } = useCollection<Claim>(claimsCollection);
+  const { data: claimsSnapshot, isLoading, error } = useCollection<Claim>(claimsCollection);
+  const claims = React.useMemo(() => claimsSnapshot ?? [], [claimsSnapshot]);
 
   // Use initialClaims only when Firebase is not available
-  const effectiveClaims = React.useMemo(() => {
-    return firestore ? claims : initialClaims;
+  const effectiveClaims = React.useMemo<Claim[]>(() => {
+    if (firestore) {
+      return claims;
+    }
+    return initialClaims ?? [];
   }, [firestore, claims, initialClaims]);
 
   const addClaims = React.useCallback(async (newClaims: Omit<Claim, 'id'>[]) => {
@@ -57,11 +61,14 @@ export const useClaims = (initialClaims: Claim[] = []) => {
     });
   }, [firestore]);
 
-  const getClaimStatus = React.useCallback((claimId: string | null) => {
-    if (!claimId) return null;
-    const claim = effectiveClaims.find(c => c.id === claimId);
-    return claim ? { statementSent: claim.statementSent } : null;
-  }, [effectiveClaims]);
+  const getClaimStatus = React.useCallback(
+    (claimId: string | null) => {
+      if (!claimId) return null;
+      const claim = effectiveClaims.find((c) => c.id === claimId);
+      return claim ? { statementSent: claim.statementSent } : null;
+    },
+    [effectiveClaims]
+  );
 
   return {
     claims: effectiveClaims,

@@ -4,8 +4,9 @@ import { useClaims } from "@/hooks/use-claims";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileWarning, CheckCircle, DollarSign } from "lucide-react";
 import { useMemo } from "react";
+import type { Claim } from "@/lib/types";
 
-export function ClaimsSummary({ initialClaims }: { initialClaims: any[] }) {
+export function ClaimsSummary({ initialClaims = [] }: { initialClaims?: Claim[] }) {
     const { claims } = useClaims(initialClaims);
 
     const summary = useMemo(() => {
@@ -15,7 +16,6 @@ export function ClaimsSummary({ initialClaims }: { initialClaims: any[] }) {
       const totalOutstanding = safeClaims.filter(c => !c.statementSent).reduce((acc, c) => acc + c.amount, 0);
       return { statementsNeeded, statementsSent, totalOutstanding, totalClaims: safeClaims.length };
   }, [claims]);
-
 
     return (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
