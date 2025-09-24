@@ -224,27 +224,26 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
 
   return (
     <Tabs defaultValue="all" onValueChange={(value) => setFilter(value as any)}>
-      <div className="flex items-center justify-between">
-        <TabsList>
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="needed">Statement Needed</TabsTrigger>
-          <TabsTrigger value="sent">Statement Sent</TabsTrigger>
-        </TabsList>
-        <div className="flex items-center gap-2">
-            {numSelected > 0 && (
-                <>
-                    <span className="text-sm text-muted-foreground">{numSelected} selected</span>
-                    <Button variant="outline" size="sm" onClick={handleGenerateStatements}>
-                        <FileText className="mr-2 h-4 w-4" />
-                        Generate Statements
-                    </Button>
-                    <Button variant="destructive" size="sm" onClick={() => setIsDeleteDialogOpen(true)}>
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete ({numSelected})
-                    </Button>
-                </>
-            )}
-        </div>
+      <div className="flex items-center gap-4">
+        {numSelected > 0 ? (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">{numSelected} selected</span>
+            <Button variant="outline" size="sm" onClick={handleGenerateStatements}>
+              <FileText className="mr-2 h-4 w-4" />
+              Generate Statements
+            </Button>
+            <Button variant="destructive" size="sm" onClick={() => setIsDeleteDialogOpen(true)}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete ({numSelected})
+            </Button>
+          </div>
+        ) : (
+          <TabsList>
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="needed">Statement Needed</TabsTrigger>
+            <TabsTrigger value="sent">Statement Sent</TabsTrigger>
+          </TabsList>
+        )}
       </div>
       <TabsContent value={filter}>
         <Card>
@@ -381,4 +380,5 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
   );
 }
 
+    
     
