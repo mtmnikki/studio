@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -38,6 +39,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import type { Claim } from "@/lib/types";
 import { useClaims } from "@/hooks/use-claims";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] }) {
   const { claims, setClaims, getClaimStatus, removeClaims, updateClaim } = useClaims(initialClaims);
@@ -109,7 +111,7 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
   };
   
   const handleSave = () => {
-    if (editingClaimId) {
+    if (editingClaimId && editingData.id) {
       updateClaim(editingData as Claim);
       toast({
         title: "Claim Updated",
@@ -123,6 +125,14 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
     const { name, value } = e.target;
     setEditingData(prev => ({ ...prev, [name]: value }));
   };
+
+  const handleSelectChange = (name: string, value: string) => {
+    setEditingData(prev => ({ ...prev, [name]: value }));
+  }
+
+  const handleCheckboxChange = (name: string, checked: boolean) => {
+    setEditingData(prev => ({ ...prev, [name]: checked }));
+  }
 
   const numSelected = selectedClaimIds.length;
   const isAllSelected = numSelected > 0 && numSelected === filteredClaims.length;
@@ -145,21 +155,45 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
   };
 
   const renderCell = (claim: Claim, field: keyof Claim) => {
-    if (editingClaimId === claim.id) {
-      const value = editingData[field] as string | number;
-      if (typeof claim[field] === 'boolean') {
+    const isEditing = editingClaimId === claim.id;
+    const isEditableField = ['paymentStatus', 'postingStatus', 'workflow', 'notes', 'statementSent'].includes(field);
+
+    if (isEditing && isEditableField) {
+      if (field === 'paymentStatus') {
+        return (
+          <Select name="paymentStatus" value={editingData.paymentStatus} onValueChange={(value) => handleSelectChange('paymentStatus', value)}>
+            <SelectTrigger className="h-8 w-[100px]"><SelectValue placeholder="Select Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="PAID">PAID</SelectItem>
+              <SelectItem value="DENIED">DENIED</SelectItem>
+              <SelectItem value="PENDING">PENDING</SelectItem>
+            </SelectContent>
+          </Select>
+        )
+      }
+      if (field === 'postingStatus') {
+        return (
+          <Select name="postingStatus" value={editingData.postingStatus} onValueChange={(value) => handleSelectChange('postingStatus', value)}>
+            <SelectTrigger className="h-8 w-[110px]"><SelectValue placeholder="Select Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Posted">Posted</SelectItem>
+              <SelectItem value="Unposted">Unposted</SelectItem>
+            </SelectContent>
+          </Select>
+        )
+      }
+      if (field === 'statementSent') {
           return (
              <Checkbox
-                name={field}
-                checked={editingData[field] as boolean}
-                onCheckedChange={(checked) => setEditingData(prev => ({ ...prev, [field]: checked }))}
+                checked={editingData.statementSent}
+                onCheckedChange={(checked) => handleCheckboxChange('statementSent', !!checked)}
               />
           )
       }
       return (
         <Input
           name={field}
-          value={value}
+          value={editingData[field] as string | number}
           onChange={handleInputChange}
           className="h-8"
         />
@@ -167,21 +201,24 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
     }
     
     const cellValue = claim[field];
-    if (typeof cellValue === 'boolean') {
+    if (field === 'statementSent') {
       return (
         <Badge variant={cellValue ? 'default' : 'outline'}>
           {cellValue ? 'Yes' : 'No'}
         </Badge>
       );
     }
+    if (field === 'paymentStatus') {
+      return <Badge variant={claim.paymentStatus === 'PAID' ? "secondary" : claim.paymentStatus === 'PENDING' ? 'outline' : "destructive"}>{claim.paymentStatus}</Badge>
+    }
      if (typeof cellValue === 'number' && ['amount', 'paid', 'adjustment', 'patientPay'].includes(field)) {
       return `$${cellValue.toFixed(2)}`;
     }
-    if (field.toLowerCase().includes('date')) {
+    if (field.toLowerCase().includes('date') && cellValue) {
         return new Date(cellValue as string).toLocaleDateString();
     }
 
-    return cellValue;
+    return cellValue as React.ReactNode;
   };
 
 
@@ -216,7 +253,7 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
           </CardHeader>
           <CardContent>
             <div className="relative overflow-x-auto">
-              <Table className="min-w-max">
+              <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>
@@ -262,24 +299,22 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
                             aria-label={`Select claim ${claim.id}`}
                           />
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'checkDate')}</TableCell>
-                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'checkNumber')}</TableCell>
-                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'npi')}</TableCell>
-                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'payee')}</TableCell>
-                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'payer')}</TableCell>
-                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'rx')}</TableCell>
-                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'serviceDate')}</TableCell>
-                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'cardholderId')}</TableCell>
-                        <TableCell className="font-medium whitespace-nowrap">{renderCell(claim, 'patientName')}</TableCell>
-                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'serviceDescription')}</TableCell>
-                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'productId')}</TableCell>
-                        <TableCell className="whitespace-nowrap text-right">{renderCell(claim, 'amount')}</TableCell>
-                        <TableCell className="whitespace-nowrap text-right">{renderCell(claim, 'paid')}</TableCell>
-                        <TableCell className="whitespace-nowrap text-right">{renderCell(claim, 'adjustment')}</TableCell>
-                        <TableCell className="whitespace-nowrap text-right">{renderCell(claim, 'patientPay')}</TableCell>
-                        <TableCell>
-                          {editingClaimId === claim.id ? renderCell(claim, 'paymentStatus') : <Badge variant={claim.paymentStatus === 'PAID' ? "secondary" : "destructive"}>{claim.paymentStatus}</Badge>}
-                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{claim.checkDate ? new Date(claim.checkDate).toLocaleDateString() : ''}</TableCell>
+                        <TableCell className="whitespace-nowrap">{claim.checkNumber}</TableCell>
+                        <TableCell className="whitespace-nowrap">{claim.npi}</TableCell>
+                        <TableCell className="whitespace-nowrap">{claim.payee}</TableCell>
+                        <TableCell className="whitespace-nowrap">{claim.payer}</TableCell>
+                        <TableCell className="whitespace-nowrap">{claim.rx}</TableCell>
+                        <TableCell className="whitespace-nowrap">{claim.serviceDate ? new Date(claim.serviceDate).toLocaleDateString() : ''}</TableCell>
+                        <TableCell className="whitespace-nowrap">{claim.cardholderId}</TableCell>
+                        <TableCell className="font-medium whitespace-nowrap">{claim.patientName}</TableCell>
+                        <TableCell className="whitespace-nowrap">{claim.serviceDescription}</TableCell>
+                        <TableCell className="whitespace-nowrap">{claim.productId}</TableCell>
+                        <TableCell className="whitespace-nowrap text-right">${claim.amount.toFixed(2)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-right">${claim.paid.toFixed(2)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-right">${claim.adjustment.toFixed(2)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-right">${claim.patientPay.toFixed(2)}</TableCell>
+                        <TableCell>{renderCell(claim, 'paymentStatus')}</TableCell>
                         <TableCell className="whitespace-nowrap">{renderCell(claim, 'postingStatus')}</TableCell>
                         <TableCell className="whitespace-nowrap">{renderCell(claim, 'workflow')}</TableCell>
                         <TableCell className="whitespace-nowrap">{renderCell(claim, 'notes')}</TableCell>
@@ -291,26 +326,26 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
                               <Button onClick={handleCancelEdit} size="icon" variant="ghost"><XCircle className="h-4 w-4" /></Button>
                             </div>
                           ) : (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button aria-haspopup="true" size="icon" variant="ghost">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                  <span className="sr-only">Toggle menu</span>
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                <DropdownMenuItem onClick={() => handleEdit(claim)}>
-                                  <Edit className="mr-2 h-4 w-4" /> Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
-                                  <Link href={`/statement/${claim.id}`}>
-                                    <FileText className="mr-2 h-4 w-4" />
-                                    Generate Statement
-                                  </Link>
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            <div className="flex items-center">
+                              <Button onClick={() => handleEdit(claim)} size="icon" variant="ghost"><Edit className="h-4 w-4" /></Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button aria-haspopup="true" size="icon" variant="ghost">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                    <span className="sr-only">Toggle menu</span>
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                  <DropdownMenuItem asChild>
+                                    <Link href={`/statement/${claim.id}`}>
+                                      <FileText className="mr-2 h-4 w-4" />
+                                      Generate Statement
+                                    </Link>
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
                           )}
                         </TableCell>
                       </TableRow>
@@ -345,3 +380,5 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
     </Tabs>
   );
 }
+
+    
