@@ -19,16 +19,34 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, FileText } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { MoreHorizontal, FileText, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/hooks/use-toast";
 import type { Claim } from "@/lib/types";
 import { useClaims } from "@/hooks/use-claims";
 
 export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] }) {
-  const { claims, setClaims, getClaimStatus } = useClaims(initialClaims);
+  const { claims, setClaims, getClaimStatus, removeClaims } = useClaims(initialClaims);
+  const { toast } = useToast();
+  const router = useRouter();
+
   const [filter, setFilter] = React.useState<"all" | "needed" | "sent">("all");
-  
+  const [selectedClaimIds, setSelectedClaimIds] = React.useState<string[]>([]);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
+
   const filteredClaims = React.useMemo(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
@@ -47,25 +65,83 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
       }
     }
     
+    const claimsToFilter = claims;
     switch (filter) {
       case 'needed':
-        return claims.filter(c => !c.statementSent);
+        return claimsToFilter.filter(c => !c.statementSent);
       case 'sent':
-        return claims.filter(c => c.statementSent);
+        return claimsToFilter.filter(c => c.statementSent);
       case 'all':
       default:
-        return claims;
+        return claimsToFilter;
     }
   }, [claims, filter, setClaims, getClaimStatus]);
 
+  React.useEffect(() => {
+    setSelectedClaimIds([]);
+  }, [filter]);
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedClaimIds(filteredClaims.map(c => c.id));
+    } else {
+      setSelectedClaimIds([]);
+    }
+  };
+
+  const handleSelectRow = (claimId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedClaimIds(prev => [...prev, claimId]);
+    } else {
+      setSelectedClaimIds(prev => prev.filter(id => id !== claimId));
+    }
+  };
+
+  const numSelected = selectedClaimIds.length;
+  const isAllSelected = numSelected > 0 && numSelected === filteredClaims.length;
+  const isIndeterminate = numSelected > 0 && numSelected < filteredClaims.length;
+
+  const handleDeleteSelected = () => {
+    removeClaims(selectedClaimIds);
+    toast({
+      title: "Claims Deleted",
+      description: `${numSelected} claims have been successfully deleted.`,
+    });
+    setSelectedClaimIds([]);
+    setIsDeleteDialogOpen(false);
+  };
+
+  const handleGenerateStatements = () => {
+    const selectedClaims = claims.filter(c => selectedClaimIds.includes(c.id));
+    const patientIds = [...new Set(selectedClaims.map(c => c.patientId))];
+    const query = new URLSearchParams({ p: patientIds }).toString();
+    router.push(`/statement/bulk?${query}`);
+  };
+
+
   return (
     <Tabs defaultValue="all" onValueChange={(value) => setFilter(value as any)}>
-      <div className="flex items-center">
+      <div className="flex items-center justify-between">
         <TabsList>
           <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="needed">Statement Needed</TabsTrigger>
           <TabsTrigger value="sent">Statement Sent</TabsTrigger>
         </TabsList>
+        <div className="flex items-center gap-2">
+            {numSelected > 0 && (
+                <>
+                    <span className="text-sm text-muted-foreground">{numSelected} selected</span>
+                    <Button variant="outline" size="sm" onClick={handleGenerateStatements}>
+                        <FileText className="mr-2 h-4 w-4" />
+                        Generate Statements
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={() => setIsDeleteDialogOpen(true)}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete ({numSelected})
+                    </Button>
+                </>
+            )}
+        </div>
       </div>
       <TabsContent value={filter}>
         <Card>
@@ -76,6 +152,13 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead padding="checkbox">
+                    <Checkbox
+                      checked={isAllSelected}
+                      onCheckedChange={(checked) => handleSelectAll(Boolean(checked))}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
                   <TableHead className="whitespace-nowrap">Check Date</TableHead>
                   <TableHead className="whitespace-nowrap">Check #</TableHead>
                   <TableHead className="whitespace-nowrap">NPI</TableHead>
@@ -104,7 +187,14 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
               <TableBody>
                 {filteredClaims.length > 0 ? (
                   filteredClaims.map((claim) => (
-                    <TableRow key={claim.id}>
+                    <TableRow key={claim.id} data-state={selectedClaimIds.includes(claim.id) ? "selected" : ""}>
+                       <TableCell padding="checkbox">
+                        <Checkbox
+                          checked={selectedClaimIds.includes(claim.id)}
+                          onCheckedChange={(checked) => handleSelectRow(claim.id, Boolean(checked))}
+                          aria-label={`Select claim ${claim.id}`}
+                        />
+                      </TableCell>
                       <TableCell className="whitespace-nowrap">{new Date(claim.checkDate).toLocaleDateString()}</TableCell>
                       <TableCell className="whitespace-nowrap">{claim.checkNumber}</TableCell>
                       <TableCell className="whitespace-nowrap">{claim.npi}</TableCell>
@@ -156,7 +246,7 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={21} className="h-24 text-center">
+                    <TableCell colSpan={22} className="h-24 text-center">
                       No claims found for this filter.
                     </TableCell>
                   </TableRow>
@@ -166,6 +256,20 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
           </CardContent>
         </Card>
       </TabsContent>
+       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the {numSelected} selected claim(s). This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteSelected}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Tabs>
   );
 }
