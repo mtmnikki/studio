@@ -5,31 +5,50 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { PrintStatementButton } from "@/components/print-statement-button";
+import type { Claim, Patient } from "@/lib/types";
 
-async function getData(claimId: string) {
-  const claim = claims.find((c) => c.id === claimId);
-  if (!claim) {
+// This function now finds all claims for the patient associated with the given claim ID.
+async function getStatementData(claimId: string) {
+  const initialClaim = claims.find((c) => c.id === claimId);
+  if (!initialClaim) {
     return null;
   }
-  const patient = patients.find((p) => p.id === claim.patientId);
+
+  const patient = patients.find((p) => p.id === initialClaim.patientId);
   if (!patient) {
     return null;
   }
+
+  // Find all claims for this patient that need a statement
+  const patientClaims = claims.filter(
+    (c) => c.patientId === patient.id && !c.statementSent
+  );
+
+  // If there are no claims needing a statement for this patient,
+  // which might happen if accessed directly, we can show the initial one.
+  const claimsForStatement = patientClaims.length > 0 ? patientClaims : [initialClaim];
+
+
   const accountNumber = calculateAccountNumber(patient);
-  return { claim, patient, accountNumber };
+  const totalAmountDue = claimsForStatement.reduce((acc, claim) => acc + claim.patientPay, 0);
+
+  return { claims: claimsForStatement, patient, accountNumber, totalAmountDue };
 }
 
+
 export default async function StatementPage({ params }: { params: { id: string } }) {
-  const data = await getData(params.id);
+  const data = await getStatementData(params.id);
 
   if (!data) {
     notFound();
   }
 
-  const { claim, patient, accountNumber } = data;
+  const { claims: statementClaims, patient, accountNumber, totalAmountDue } = data;
+  const statementDate = new Date();
+  const paymentDueDate = new Date(statementDate.getTime() + 30 * 24 * 60 * 60 * 1000);
 
   return (
-    <div className="bg-background min-h-screen p-4 sm:p-8">
+    <div className="bg-background min-h-screen p-4 sm:p-8 font-sans text-sm">
       <div className="max-w-4xl mx-auto">
         <div className="no-print mb-8 flex justify-between items-center">
           <Button variant="outline" asChild>
@@ -38,68 +57,119 @@ export default async function StatementPage({ params }: { params: { id: string }
               Back to Dashboard
             </Link>
           </Button>
-          <PrintStatementButton claimId={claim.id} />
+          {/* We pass the first claim ID for marking as sent, assuming all are marked */}
+          <PrintStatementButton claimId={params.id} />
         </div>
-        <div className="bg-card p-8 rounded-lg shadow-sm border">
-          <header className="flex justify-between items-start mb-8">
+
+        {/* Statement Content */}
+        <div className="bg-card p-8 rounded-lg shadow-sm border text-black">
+          {/* Header */}
+          <header className="grid grid-cols-2 items-start mb-8">
             <div>
-              <h1 className="text-3xl font-bold text-primary">Patient Statement</h1>
-              <p className="text-muted-foreground">Date: {new Date().toLocaleDateString()}</p>
+              <h2 className="text-lg font-semibold">Harps Pharmacy #144</h2>
+              <p>1120 E. German Ln</p>
+              <p>Conway, AR 72032</p>
+              <p>501-329-3733</p>
             </div>
             <div className="text-right">
-              <h2 className="text-lg font-semibold">Jenn's Pharmacy</h2>
-              <p className="text-sm text-muted-foreground">123 Wellness Way</p>
-              <p className="text-sm text-muted-foreground">Healthville, ST 98765</p>
+              <h1 className="text-3xl font-bold tracking-wider">STATEMENT</h1>
             </div>
           </header>
 
-          <section className="grid grid-cols-2 gap-8 mb-12">
-            <div>
-              <h3 className="font-semibold mb-2 border-b pb-1">Bill To:</h3>
-              <p className="font-bold">{patient.firstName} {patient.lastName}</p>
-              <p>{patient.address.street}</p>
-              <p>{patient.address.city}, {patient.address.state} {patient.address.zip}</p>
-            </div>
-            <div className="text-right">
-              <h3 className="font-semibold mb-2">Account Number:</h3>
-              <p className="font-mono text-lg">{accountNumber}</p>
-              <h3 className="font-semibold mt-4 mb-2">Amount Due:</h3>
-              <p className="text-3xl font-bold text-primary">${claim.amount.toFixed(2)}</p>
-            </div>
+          {/* Patient Info */}
+          <section className="mb-6">
+            <p className="font-bold">{patient.firstName.toUpperCase()} {patient.lastName.toUpperCase()}</p>
+            <p>{patient.address.street.toUpperCase()}</p>
+            <p>{patient.address.city.toUpperCase()}, {patient.address.state.toUpperCase()} {patient.address.zip}</p>
           </section>
 
-          <section>
-            <h3 className="font-semibold mb-4 text-lg">Claim Details</h3>
-            <div className="border rounded-lg">
-              <table className="w-full">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="p-3 text-left font-semibold">Service Date</th>
-                    <th className="p-3 text-left font-semibold">Description</th>
-                    <th className="p-3 text-right font-semibold">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-t">
-                    <td className="p-3">{new Date(claim.serviceDate).toLocaleDateString()}</td>
-                    <td className="p-3">{claim.serviceDescription}</td>
-                    <td className="p-3 text-right">${claim.amount.toFixed(2)}</td>
-                  </tr>
-                </tbody>
-                <tfoot>
-                  <tr className="border-t font-bold bg-muted/50">
-                    <td colSpan={2} className="p-3 text-right">Total Due</td>
-                    <td className="p-3 text-right">${claim.amount.toFixed(2)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+          {/* Summary Table */}
+          <section className="mb-8">
+            <table className="w-full border-collapse border">
+              <thead className="bg-muted/50">
+                <tr className="border-b">
+                  <th className="p-2 text-left font-semibold border-r">Statement Date</th>
+                  <th className="p-2 text-left font-semibold border-r">Account</th>
+                  <th className="p-2 text-left font-semibold border-r">Payment Due</th>
+                  <th className="p-2 text-left font-semibold">Pay This Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="p-2 border-r">{statementDate.toLocaleDateString()}</td>
+                  <td className="p-2 border-r font-mono">{accountNumber}</td>
+                  <td className="p-2 border-r">{paymentDueDate.toLocaleDateString()}</td>
+                  <td className="p-2 font-bold">${totalAmountDue.toFixed(2)}</td>
+                </tr>
+              </tbody>
+            </table>
           </section>
 
-          <footer className="mt-12 text-center text-muted-foreground text-sm">
-            <p>Please make payment by {new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}.</p>
-            <p>Thank you for your business!</p>
-          </footer>
+          {/* Details Table */}
+          <section className="mb-8">
+            <table className="w-full border-collapse border">
+              <thead className="bg-muted/50">
+                <tr className="border-b">
+                  <th className="p-2 text-left font-semibold border-r">Date</th>
+                  <th className="p-2 text-left font-semibold border-r">Description</th>
+                  <th className="p-2 text-right font-semibold border-r">Billed</th>
+                  <th className="p-2 text-right font-semibold border-r">Insurance Paid</th>
+                  <th className="p-2 text-right font-semibold border-r">Insurance Adjustment</th>
+                  <th className="p-2 text-right font-semibold">Patient Pay</th>
+                </tr>
+              </thead>
+              <tbody>
+                {statementClaims.map(claim => (
+                  <tr key={claim.id} className="border-b">
+                    <td className="p-2 border-r">{new Date(claim.serviceDate).toLocaleDateString()}</td>
+                    <td className="p-2 border-r">{claim.productId}– {claim.serviceDescription}</td>
+                    <td className="p-2 text-right border-r">${claim.amount.toFixed(2)}</td>
+                    <td className="p-2 text-right border-r">${claim.paid.toFixed(2)}</td>
+                    <td className="p-2 text-right border-r">${claim.adjustment.toFixed(2)}</td>
+                    <td className="p-2 text-right">${claim.patientPay.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="font-bold">
+                  <td colSpan={5} className="p-2 text-right">Balance Due</td>
+                  <td className="p-2 text-right">${totalAmountDue.toFixed(2)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </section>
+          
+          {/* Footer Text */}
+          <section className="text-xs text-center space-y-2 mb-10">
+              <p>For your convenience, payments can be made by mail, phone, or in-person at your local Harps Pharmacy. We accept cash, credit/debit cards, and checks. If you have any questions regarding this statement, please contact your local Harps Pharmacy.</p>
+              <p>Thank you for choosing Harps Pharmacy for your healthcare needs!</p>
+          </section>
+          
+          {/* Remittance Slip */}
+          <div className="border-t border-dashed pt-6">
+            <div className="grid grid-cols-2 gap-8">
+                <div className="text-xs">
+                    <p className="font-bold text-sm">Account Number: {accountNumber}</p>
+                    <p className="font-bold text-sm">Amount Due: ${totalAmountDue.toFixed(2)}</p>
+                    <div className="flex items-center gap-4 mt-4">
+                        <label htmlFor="amount-enclosed" className="font-bold text-sm">Amount Enclosed</label>
+                        <div className="border h-8 w-32"></div>
+                    </div>
+                </div>
+                <div className="text-xs">
+                    <p className="font-bold">Make check payable to/Mail check to:</p>
+                    <p>Harps Pharmacy #144</p>
+                    <p>1120 E. German Ln</p>
+                    <p>Conway, AR 72032</p>
+                </div>
+            </div>
+             <div className="mt-4 text-xs">
+                    <p className="font-bold">{patient.firstName.toUpperCase()} {patient.lastName.toUpperCase()}</p>
+                    <p>{patient.address.street.toUpperCase()}</p>
+                    <p>{patient.address.city.toUpperCase()}, {patient.address.state.toUpperCase()} {patient.address.zip}</p>
+              </div>
+          </div>
+
         </div>
       </div>
     </div>
