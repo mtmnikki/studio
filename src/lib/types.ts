@@ -13,25 +13,25 @@ export interface Patient {
 
 export interface Claim {
   id: string;
-  patientId: string;
-  patientName: string; // Denormalized for easy display
-  serviceDate: string; // YYYY-MM-DD, also known as DOS
-  serviceDescription: string; // also known as Product
-  amount: number; // also known as Billed
-  statementSent: boolean;
+  checkDate: string; // YYYY-MM-DD
   checkNumber: string;
-  checkDate: string;
-
-  // Fields from image
   npi: string;
   payee: string;
   payer: string;
   rx: string;
-  cardholder: string;
-  productId: string;
+  serviceDate: string; // YYYY-MM-DD, also known as DOS
+  cardholderId: string;
+  patientName: string; // Denormalized for easy display
+  patientId: string;
+  serviceDescription: string; // also known as Product/Service
+  productId: string; // CPT/HCPCS Code
+  amount: number; // also known as Billed
   paid: number;
-  patientPay: number;
   adjustment: number;
+  patientPay: number;
   paymentStatus: 'PAID' | 'DENIED' | 'PENDING';
   postingStatus: 'Posted' | 'Unposted';
+  workflow: string; // From options in image
+  notes: string;
+  statementSent: boolean; // 1st Statement Sent?
 }

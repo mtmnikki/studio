@@ -78,14 +78,24 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
                 <TableRow>
                   <TableHead>Check Date</TableHead>
                   <TableHead>Check #</TableHead>
-                  <TableHead>Patient</TableHead>
+                  <TableHead>NPI</TableHead>
+                  <TableHead>Payee</TableHead>
+                  <TableHead>Payer</TableHead>
+                  <TableHead>Rx #</TableHead>
                   <TableHead>DOS</TableHead>
+                  <TableHead>Cardholder ID</TableHead>
+                  <TableHead>Patient</TableHead>
+                  <TableHead>Service</TableHead>
+                  <TableHead>CPT/HCPCS</TableHead>
                   <TableHead>Billed</TableHead>
                   <TableHead>Paid</TableHead>
-                  <TableHead>Patient Pay</TableHead>
                   <TableHead>Adjustment</TableHead>
+                  <TableHead>Patient Pay</TableHead>
                   <TableHead>Payment Status</TableHead>
                   <TableHead>Posting Status</TableHead>
+                  <TableHead>Workflow</TableHead>
+                  <TableHead>Notes</TableHead>
+                  <TableHead>1st Stmt Sent?</TableHead>
                   <TableHead>
                     <span className="sr-only">Actions</span>
                   </TableHead>
@@ -97,18 +107,32 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
                     <TableRow key={claim.id}>
                       <TableCell>{new Date(claim.checkDate).toLocaleDateString()}</TableCell>
                       <TableCell>{claim.checkNumber}</TableCell>
-                      <TableCell className="font-medium">{claim.patientName}</TableCell>
+                      <TableCell>{claim.npi}</TableCell>
+                      <TableCell>{claim.payee}</TableCell>
+                      <TableCell>{claim.payer}</TableCell>
+                      <TableCell>{claim.rx}</TableCell>
                       <TableCell>{new Date(claim.serviceDate).toLocaleDateString()}</TableCell>
+                      <TableCell>{claim.cardholderId}</TableCell>
+                      <TableCell className="font-medium">{claim.patientName}</TableCell>
+                      <TableCell>{claim.serviceDescription}</TableCell>
+                      <TableCell>{claim.productId}</TableCell>
                       <TableCell>${claim.amount.toFixed(2)}</TableCell>
                       <TableCell>${claim.paid.toFixed(2)}</TableCell>
-                      <TableCell>${claim.patientPay.toFixed(2)}</TableCell>
                       <TableCell>${claim.adjustment.toFixed(2)}</TableCell>
+                      <TableCell>${claim.patientPay.toFixed(2)}</TableCell>
                       <TableCell>
                         <Badge variant={claim.paymentStatus === 'PAID' ? "secondary" : "destructive"}>
                           {claim.paymentStatus}
                         </Badge>
                       </TableCell>
                       <TableCell>{claim.postingStatus}</TableCell>
+                      <TableCell>{claim.workflow}</TableCell>
+                      <TableCell>{claim.notes}</TableCell>
+                      <TableCell>
+                        <Badge variant={claim.statementSent ? 'default' : 'outline'}>
+                          {claim.statementSent ? 'Yes' : 'No'}
+                        </Badge>
+                      </TableCell>
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -132,7 +156,7 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={11} className="h-24 text-center">
+                    <TableCell colSpan={21} className="h-24 text-center">
                       No claims found for this filter.
                     </TableCell>
                   </TableRow>
