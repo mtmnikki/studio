@@ -6,7 +6,15 @@ import { ClaimsSummary } from "@/components/claims-summary";
 import { useClaims } from "@/hooks/use-claims";
 
 export default function DashboardPage() {
-  const { claims } = useClaims(); 
+  const { claims, isLoading } = useClaims(); 
+
+  if (isLoading) {
+    return (
+        <div className="flex justify-center items-center h-64">
+          <p>Loading claims data...</p>
+        </div>
+    )
+  }
 
   return (
     <>

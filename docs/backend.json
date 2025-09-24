@@ -1,143 +1,76 @@
 {
   "entities": {
     "Claim": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Claim",
       "type": "object",
       "description": "Represents a single claim for billing.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Claim entity."
-        },
-        "transactRxClaimId": {
-          "type": "string",
-          "description": "Claim ID from the TransactRx portal."
-        },
-        "patientId": {
-          "type": "string",
-          "description": "Reference to the Patient associated with this claim. (Relationship: Patient 1:N Claim)"
-        },
-        "dateOfService": {
-          "type": "string",
-          "description": "Date when the service was provided.",
-          "format": "date-time"
-        },
-        "billedAmount": {
-          "type": "number",
-          "description": "The amount billed for the claim."
-        },
-        "allowedAmount": {
-          "type": "number",
-          "description": "The amount allowed for the claim by the insurance."
-        },
-        "patientResponsibility": {
-          "type": "number",
-          "description": "The amount the patient is responsible for."
-        },
-        "firstStatementSent": {
-          "type": "boolean",
-          "description": "Indicates if the first statement has been sent."
-        }
+        "checkDate": { "type": "string", "format": "date" },
+        "checkNumber": { "type": "string" },
+        "npi": { "type": "string" },
+        "payee": { "type": "string" },
+        "payer": { "type": "string" },
+        "rx": { "type": "string" },
+        "serviceDate": { "type": "string", "format": "date" },
+        "cardholderId": { "type": "string" },
+        "patientName": { "type": "string" },
+        "patientId": { "type": "string" },
+        "serviceDescription": { "type": "string" },
+        "productId": { "type": "string" },
+        "amount": { "type": "number" },
+        "paid": { "type": "number" },
+        "adjustment": { "type": "number" },
+        "patientPay": { "type": "number" },
+        "paymentStatus": { "type": "string", "enum": ["PAID", "DENIED", "PENDING"] },
+        "postingStatus": { "type": "string", "enum": ["Posted", "Unposted"] },
+        "workflow": { "type": "string", "enum": ["New", "Pending", "Complete", "Sent to Collections"] },
+        "notes": { "type": "string" },
+        "statementSent": { "type": "boolean" },
+        "statementSent2nd": { "type": "boolean" }
       },
       "required": [
-        "id",
-        "transactRxClaimId",
+        "checkDate",
+        "serviceDate",
         "patientId",
-        "dateOfService",
-        "billedAmount",
-        "allowedAmount",
-        "patientResponsibility",
-        "firstStatementSent"
+        "patientName",
+        "amount",
+        "paid",
+        "patientPay"
       ]
     },
     "Patient": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Patient",
       "type": "object",
       "description": "Represents a patient.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Patient entity."
-        },
-        "firstName": {
-          "type": "string",
-          "description": "First name of the patient."
-        },
-        "lastName": {
-          "type": "string",
-          "description": "Last name of the patient."
-        },
-        "dateOfBirth": {
-          "type": "string",
-          "description": "Date of birth of the patient.",
-          "format": "date"
-        },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "dateOfBirth": { "type": "string", "format": "date" },
         "address": {
-          "type": "string",
-          "description": "Full mailing address of the patient."
-        },
-        "accountNumber": {
-          "type": "string",
-          "description": "Calculated account number for the patient."
+          "type": "object",
+          "properties": {
+            "street": { "type": "string" },
+            "city": { "type": "string" },
+            "state": { "type": "string" },
+            "zip": { "type": "string" }
+          },
+          "required": ["street", "city", "state", "zip"]
         }
       },
-      "required": [
-        "id",
-        "firstName",
-        "lastName",
-        "dateOfBirth",
-        "address",
-        "accountNumber"
-      ]
+      "required": ["firstName", "lastName", "dateOfBirth", "address"]
     }
   },
   "auth": {
-    "providers": [
-      "password",
-      "anonymous"
-    ]
+    "providers": ["password", "anonymous"]
   },
   "firestore": {
-    "structure": [
-      {
-        "path": "patients/{patientId}",
-        "definition": {
-          "entityName": "Patient",
-          "schema": {
-            "$ref": "#/backend/entities/Patient"
-          },
-          "description": "Stores patient data. The 'patientId' is used to uniquely identify each patient.",
-          "params": [
-            {
-              "name": "patientId",
-              "description": "The unique identifier for the patient."
-            }
-          ]
-        }
-      },
-      {
-        "path": "patients/{patientId}/claims/{claimId}",
-        "definition": {
-          "entityName": "Claim",
-          "schema": {
-            "$ref": "#/backend/entities/Claim"
-          },
-          "description": "Stores claim data associated with a specific patient. Includes denormalized 'patientId' for authorization independence.",
-          "params": [
-            {
-              "name": "patientId",
-              "description": "The unique identifier for the patient."
-            },
-            {
-              "name": "claimId",
-              "description": "The unique identifier for the claim."
-            }
-          ]
-        }
-      }
-    ],
-    "reasoning": "The Firestore structure is designed to organize patient and claim data efficiently for Jenn's Dream Billing Platform.  Authorization Independence is achieved by storing all claims under a patient's document, thereby removing any need for complex `get()` calls in security rules. The patient ID is included in each claim document.\n\nThis approach supports the required QAPs. Path-based ownership (claims as subcollections of patients) allows secure and efficient listing of a user's claims. The use of subcollections ensures that only authorized users (those with access to the parent patient document) can access the claim data. This structure avoids the need for filtering in rules, as each collection inherently represents a homogeneous security posture (only the patient can access their data and their claims).\n\nThis structure enables efficient retrieval of all claims associated with a specific patient, as well as any patient by ID."
+    "/patients/{patientId}": {
+      "schema": { "$ref": "#/entities/Patient" },
+      "description": "Stores patient data."
+    },
+    "/claims/{claimId}": {
+      "schema": { "$ref": "#/entities/Claim" },
+      "description": "Stores all claims. Claims contain a patientId for linking."
+    }
   }
 }

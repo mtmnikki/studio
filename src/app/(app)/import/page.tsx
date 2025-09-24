@@ -41,24 +41,24 @@ export default function ImportPage() {
       skipEmptyLines: true,
       transformHeader: (header) => header.trim(),
       // @ts-ignore
-      complete: (results: { data: any[] }) => {
+      complete: async (results: { data: any[] }) => {
         try {
-          const newClaims: Claim[] = results.data.map((row: any, index: number) => {
-            // A simple way to generate unique IDs for the new claims.
-            // In a real app, this would be handled by a database.
-            const newId = `clm_imported_${Date.now()}_${index}`;
-            const patientId = `pat_imported_${Date.now()}_${index}`;
+          const newClaims: Omit<Claim, 'id'>[] = results.data.map((row: any, index: number) => {
             
             const parseDate = (dateString: string) => {
-              if (!dateString) return '';
+              if (!dateString) return new Date().toISOString().split('T')[0];
               const date = new Date(dateString);
               // Adding timezone offset to avoid date changes
               const userTimezoneOffset = date.getTimezoneOffset() * 60000;
               return new Date(date.getTime() + userTimezoneOffset).toISOString().split('T')[0];
             }
+            
+            // A simple way to generate unique IDs for the new claims.
+            // In a real app, this would be handled by a database.
+            const patientId = `pat_imported_${row["Patient"]?.replace(/\s/g, '_') || index}`;
+
 
             return {
-              id: newId,
               checkDate: parseDate(row["Check Date"]),
               checkNumber: row["Check #"] || '',
               npi: row["NPI"] || '',
@@ -84,7 +84,7 @@ export default function ImportPage() {
             };
           });
 
-          addClaims(newClaims);
+          await addClaims(newClaims);
 
           setIsLoading(false);
           toast({

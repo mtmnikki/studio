@@ -2,13 +2,15 @@
 
 import { notFound, useSearchParams, useRouter } from "next/navigation";
 import { useClaims } from "@/hooks/use-claims";
-import { patients as allPatients } from "@/lib/data";
 import { calculateAccountNumber } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Printer } from "lucide-react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import type { Claim, Patient } from "@/lib/types";
+import { useMemo, useState, useEffect } from "react";
+import { useFirestore } from "@/firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 type StatementData = {
   claims: Claim[];
@@ -168,23 +170,49 @@ export default function BulkStatementPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { toast } = useToast();
-  const { claims: allClaims, setClaims } = useClaims();
-  const patientIds = searchParams.getAll("p");
+  const { claims: allClaims, updateClaim } = useClaims();
+  const firestore = useFirestore();
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const patientIds = useMemo(() => searchParams.getAll("p"), [searchParams]);
+
+  useEffect(() => {
+    if (!firestore || patientIds.length === 0) {
+      setIsLoading(false);
+      return;
+    };
+    
+    const fetchPatients = async () => {
+      const patientPromises = patientIds.map(id => getDoc(doc(firestore, 'patients', id)));
+      const patientDocs = await Promise.all(patientPromises);
+      const fetchedPatients = patientDocs
+        .filter(doc => doc.exists())
+        .map(doc => ({ id: doc.id, ...doc.data() } as Patient));
+      setPatients(fetchedPatients);
+      setIsLoading(false);
+    }
+    fetchPatients();
+  }, [firestore, patientIds]);
+  
 
   if (!patientIds || patientIds.length === 0) {
     notFound();
   }
   
-  const statementsData: StatementData[] = patientIds
-    .map(patientId => {
-      const patient = allPatients.find(p => p.id === patientId);
+  const statementsData: StatementData[] = patients
+    .map(patient => {
       if (!patient) return null;
       return getStatementDataForPatient(patient, allClaims);
     })
     .filter((data): data is StatementData => data !== null);
 
 
-  if (statementsData.length === 0) {
+  if (isLoading) {
+    return <div>Loading...</div>
+  }
+
+  if (statementsData.length === 0 && !isLoading) {
     return (
         <div className="bg-background min-h-screen p-4 sm:p-8 font-sans text-sm">
             <div className="max-w-4xl mx-auto text-center">
@@ -204,13 +232,11 @@ export default function BulkStatementPage() {
   }
 
   const handlePrintAndMarkSent = () => {
-    const claimIdsToUpdate = statementsData.flatMap(s => s.claims.map(c => c.id));
+    const claimsToUpdate = statementsData.flatMap(s => s.claims);
     
-    setClaims(prevClaims =>
-      prevClaims.map(c =>
-        claimIdsToUpdate.includes(c.id) ? { ...c, statementSent: true } : c
-      )
-    );
+    claimsToUpdate.forEach(claim => {
+        updateClaim({ ...claim, statementSent: true });
+    });
 
     toast({
       title: "Statements Status Updated",

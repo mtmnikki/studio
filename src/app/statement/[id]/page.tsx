@@ -1,58 +1,83 @@
 import { notFound } from "next/navigation";
-import { claims, patients } from "@/lib/data";
 import { calculateAccountNumber } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { PrintStatementButton } from "@/components/print-statement-button";
 import type { Claim, Patient } from "@/lib/types";
+import { doc, getDoc, getDocs, collection, query, where } from "firebase/firestore";
+import { getSdks } from "@/firebase";
+import { initializeFirebase } from "@/firebase";
 
-// This function now finds all claims for the patient associated with the given claim ID.
-async function getStatementData(claimId: string) {
-  const initialClaim = claims.find((c) => c.id === claimId);
-  if (!initialClaim) {
-    return null;
-  }
+// This is a temporary solution for server-side data fetching.
+// In a real app, you would have a more robust way of getting the firestore instance.
+const { firestore } = initializeFirebase();
 
-  const patient = patients.find((p) => p.id === initialClaim.patientId);
-  if (!patient) {
-    // In a real app, we might create a dummy patient record from the claim
-    const tempPatient: Patient = {
-        id: initialClaim.patientId,
-        firstName: initialClaim.patientName.split(' ')[0] || 'Patient',
-        lastName: initialClaim.patientName.split(' ')[1] || '',
-        dateOfBirth: '1900-01-01', // Placeholder
-        address: { street: 'N/A', city: 'N/A', state: 'N/A', zip: 'N/A' },
-    };
-    return getStatementDataForPatient(tempPatient, initialClaim);
-  }
+async function getStatementData(claimId: string): Promise<{
+    claims: Claim[];
+    patient: Patient;
+    accountNumber: string;
+    totalAmountDue: number;
+} | null> {
+    if (!firestore) return null;
+    const claimRef = doc(firestore, "claims", claimId);
+    const claimSnap = await getDoc(claimRef);
 
-  return getStatementDataForPatient(patient, initialClaim);
+    if (!claimSnap.exists()) {
+        return null;
+    }
+    const initialClaim = { id: claimSnap.id, ...claimSnap.data() } as Claim;
+
+     if (!initialClaim.patientId) return null;
+
+    const patientRef = doc(firestore, "patients", initialClaim.patientId);
+    const patientSnap = await getDoc(patientRef);
+    
+    let patient: Patient;
+
+    if (!patientSnap.exists()) {
+         // In a real app, we might create a dummy patient record from the claim
+        patient = {
+            id: initialClaim.patientId,
+            firstName: initialClaim.patientName.split(' ')[0] || 'Patient',
+            lastName: initialClaim.patientName.split(' ')[1] || '',
+            dateOfBirth: '1900-01-01', // Placeholder
+            address: { street: 'N/A', city: 'N/A', state: 'N/A', zip: 'N/A' },
+        };
+    } else {
+        patient = { id: patientSnap.id, ...patientSnap.data() } as Patient;
+    }
+
+    return getStatementDataForPatient(patient, initialClaim);
 }
 
-function getStatementDataForPatient(patient: Patient, initialClaim: Claim) {
-    // Find all claims for this patient that need a statement
-  const patientClaims = claims.filter(
-    (c) => c.patientId === patient.id && !c.statementSent
-  );
+async function getStatementDataForPatient(patient: Patient, initialClaim: Claim) {
+    if (!firestore) return null;
+    const claimsQuery = query(
+        collection(firestore, "claims"),
+        where("patientId", "==", patient.id),
+        where("statementSent", "==", false)
+    );
+    const claimsSnap = await getDocs(claimsQuery);
+    
+    const patientClaims: Claim[] = claimsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Claim));
 
-  // If there are no claims needing a statement for this patient,
-  // which might happen if accessed directly, we can show the initial one.
-  const claimsForStatement = patientClaims.length > 0 ? patientClaims : [initialClaim];
+    const claimsForStatement = patientClaims.length > 0 ? patientClaims : [initialClaim];
 
+    const accountNumber = calculateAccountNumber(patient);
+    const totalAmountDue = claimsForStatement.reduce((acc, claim) => acc + claim.patientPay, 0);
 
-  const accountNumber = calculateAccountNumber(patient);
-  const totalAmountDue = claimsForStatement.reduce((acc, claim) => acc + claim.patientPay, 0);
-
-  return { claims: claimsForStatement, patient, accountNumber, totalAmountDue };
+    return { claims: claimsForStatement, patient, accountNumber, totalAmountDue };
 }
 
-function formatDate(date: Date) {
-    return date.toLocaleDateString('en-US', {
+
+function formatDate(dateString: string) {
+    const date = new Date(dateString);
+    const userTimezoneOffset = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() + userTimezoneOffset).toLocaleDateString('en-US', {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
-        timeZone: 'UTC', // Use UTC to avoid timezone differences
     });
 }
 
@@ -116,9 +141,9 @@ export default async function StatementPage({ params }: { params: { id: string }
               </thead>
               <tbody>
                 <tr>
-                  <td className="p-2 border-r">{formatDate(statementDate)}</td>
+                  <td className="p-2 border-r">{formatDate(statementDate.toISOString())}</td>
                   <td className="p-2 border-r font-mono">{accountNumber}</td>
-                  <td className="p-2 border-r">{formatDate(paymentDueDate)}</td>
+                  <td className="p-2 border-r">{formatDate(paymentDueDate.toISOString())}</td>
                   <td className="p-2 font-bold">${totalAmountDue.toFixed(2)}</td>
                 </tr>
               </tbody>
@@ -141,7 +166,7 @@ export default async function StatementPage({ params }: { params: { id: string }
               <tbody>
                 {statementClaims.map(claim => (
                   <tr key={claim.id} className="border-b">
-                    <td className="p-2 border-r">{formatDate(new Date(claim.serviceDate))}</td>
+                    <td className="p-2 border-r">{formatDate(claim.serviceDate)}</td>
                     <td className="p-2 border-r">{claim.productId}– {claim.serviceDescription}</td>
                     <td className="p-2 text-right border-r">${claim.amount.toFixed(2)}</td>
                     <td className="p-2 text-right border-r">${claim.paid.toFixed(2)}</td>
@@ -166,7 +191,7 @@ export default async function StatementPage({ params }: { params: { id: string }
           </section>
           
           {/* Remittance Slip */}
-          <div className="border-t border-dashed pt-6 grid grid-cols-2 gap-8">
+           <div className="border-t border-dashed pt-6 grid grid-cols-2 gap-8">
             {/* Left side: Payment details */}
             <div className="text-xs space-y-4">
               <div>

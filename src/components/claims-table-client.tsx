@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import * as React from "react";
@@ -50,21 +51,21 @@ const noteOptions = [
     "Reversed Claim",
 ];
 
+const workflowOptions = [
+  "New", "Pending", "Complete", "Sent to Collections"
+] as const;
+
 const formatDate = (dateString: string) => {
     if (!dateString) return '';
-    // Dates are stored as 'YYYY-MM-DD', which JS new Date() interprets as UTC.
-    // toLocaleDateString() will then use the runtime's timezone.
-    // By creating the date from parts, we can make it locale-independent.
-    const parts = dateString.split('-');
-    if (parts.length === 3) {
-      const year = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10) - 1; // month is 0-indexed
-      const day = parseInt(parts[2], 10);
-      const date = new Date(year, month, day);
-      const userTimezoneOffset = date.getTimezoneOffset() * 60000;
-      return new Date(date.getTime() + userTimezoneOffset).toLocaleDateString();
-    }
-    return dateString; // Fallback for unexpected formats
+    // Dates from firestore might be in a different format, ensure consistency
+    const date = new Date(dateString);
+    // Add timezone offset to prevent the date from changing
+    const userTimezoneOffset = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() + userTimezoneOffset).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
 }
 
 
@@ -79,6 +80,7 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
   
   const filteredClaims = React.useMemo(() => {
     const claimsToFilter = claims;
+    if (!claimsToFilter) return [];
     switch (filter) {
       case 'needed':
         return claimsToFilter.filter(c => !c.statementSent && c.patientPay > 0);
@@ -132,10 +134,27 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
 
   const handleGenerateStatements = () => {
     const selectedClaims = claims.filter(c => selectedClaimIds.includes(c.id));
+    // Ensure we only get unique patient IDs
     const patientIds = [...new Set(selectedClaims.map(c => c.patientId))];
     const query = new URLSearchParams(patientIds.map(id => ['p', id])).toString();
     router.push(`/statement/bulk?${query}`);
   };
+  
+  const getWorkflowBadgeVariant = (workflow: typeof workflowOptions[number]) => {
+    switch (workflow) {
+      case "New":
+        return "default";
+      case "Pending":
+        return "secondary";
+      case "Complete":
+        return "outline";
+      case "Sent to Collections":
+        return "destructive";
+      default:
+        return "outline";
+    }
+  };
+
 
   const renderCell = (claim: Claim, field: keyof Claim) => {
     const cellValue = claim[field];
@@ -203,10 +222,24 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
             />
         )
     }
+    if (field === 'workflow') {
+      return (
+        <Select value={claim.workflow} onValueChange={(value) => handleFieldChange(claim.id, 'workflow', value)}>
+          <SelectTrigger className="h-8 w-[150px] bg-transparent border-0 shadow-none focus:ring-0">
+            <Badge variant={getWorkflowBadgeVariant(claim.workflow as any)}>{claim.workflow}</Badge>
+          </SelectTrigger>
+          <SelectContent>
+            {workflowOptions.map(option => (
+              <SelectItem key={option} value={option}>{option}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )
+    }
      if (typeof cellValue === 'number' && ['amount', 'paid', 'adjustment', 'patientPay'].includes(field)) {
       return `$${cellValue.toFixed(2)}`;
     }
-    if (field.toLowerCase().includes('date') && cellValue) {
+    if ((field.toLowerCase().includes('date') || field === 'serviceDate') && cellValue) {
         return formatDate(cellValue as string);
     }
 
@@ -307,13 +340,7 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
                         <TableCell className="whitespace-nowrap text-right">${claim.patientPay.toFixed(2)}</TableCell>
                         <TableCell className="whitespace-nowrap">{renderCell(claim, 'paymentStatus')}</TableCell>
                         <TableCell className="whitespace-nowrap">{renderCell(claim, 'postingStatus')}</TableCell>
-                        <TableCell className="whitespace-nowrap">
-                            <Input 
-                                value={claim.workflow}
-                                onChange={(e) => handleFieldChange(claim.id, 'workflow', e.target.value)}
-                                className="h-8 w-[120px] bg-transparent border-0 shadow-none focus:ring-0"
-                             />
-                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'workflow')}</TableCell>
                         <TableCell className="whitespace-nowrap">{renderCell(claim, 'notes')}</TableCell>
                         <TableCell className="whitespace-nowrap text-center">{renderCell(claim, 'statementSent')}</TableCell>
                         <TableCell className="whitespace-nowrap text-center">{renderCell(claim, 'statementSent2nd')}</TableCell>
@@ -370,5 +397,3 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
     </Tabs>
   );
 }
-
-    

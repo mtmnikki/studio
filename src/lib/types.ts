@@ -31,7 +31,7 @@ export interface Claim {
   patientPay: number;
   paymentStatus: 'PAID' | 'DENIED' | 'PENDING';
   postingStatus: 'Posted' | 'Unposted';
-  workflow: string; // From options in image
+  workflow: 'New' | 'Pending' | 'Complete' | 'Sent to Collections';
   notes: string;
   statementSent: boolean; // 1st Statement Sent?
   statementSent2nd: boolean; // 2nd Statement Sent?
