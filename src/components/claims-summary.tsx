@@ -9,11 +9,12 @@ export function ClaimsSummary({ initialClaims }: { initialClaims: any[] }) {
     const { claims } = useClaims(initialClaims);
 
     const summary = useMemo(() => {
-        const statementsNeeded = claims.filter(c => !c.statementSent).length;
-        const statementsSent = claims.length - statementsNeeded;
-        const totalOutstanding = claims.filter(c => !c.statementSent).reduce((acc, c) => acc + c.amount, 0);
-        return { statementsNeeded, statementsSent, totalOutstanding, totalClaims: claims.length };
-    }, [claims]);
+      const safeClaims = claims || [];
+      const statementsNeeded = safeClaims.filter(c => !c.statementSent).length;
+      const statementsSent = safeClaims.length - statementsNeeded;
+      const totalOutstanding = safeClaims.filter(c => !c.statementSent).reduce((acc, c) => acc + c.amount, 0);
+      return { statementsNeeded, statementsSent, totalOutstanding, totalClaims: safeClaims.length };
+  }, [claims]);
 
 
     return (
