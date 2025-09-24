@@ -61,8 +61,9 @@ export const claims: Claim[] = [
     paymentStatus: 'DENIED',
     postingStatus: 'Posted',
     workflow: 'Pending',
-    notes: '',
+    notes: 'We will not receive payment',
     statementSent: true,
+    statementSent2nd: false,
   },
   {
     id: 'clm_002',
@@ -85,8 +86,9 @@ export const claims: Claim[] = [
     paymentStatus: 'PAID',
     postingStatus: 'Posted',
     workflow: 'New',
-    notes: 'Needs review',
+    notes: 'Paid- see payment on other influenza test',
     statementSent: false,
+    statementSent2nd: false,
   },
   {
     id: 'clm_003',
@@ -109,8 +111,9 @@ export const claims: Claim[] = [
     paymentStatus: 'DENIED',
     postingStatus: 'Posted',
     workflow: 'New',
-    notes: '',
+    notes: 'Patient Meeting Deductible/Co-insurance',
     statementSent: false,
+    statementSent2nd: false,
   },
   {
     id: 'clm_004',
@@ -133,8 +136,9 @@ export const claims: Claim[] = [
     paymentStatus: 'PAID',
     postingStatus: 'Unposted',
     workflow: 'Complete',
-    notes: '',
+    notes: 'Payment Received',
     statementSent: true,
+    statementSent2nd: true,
   },
   {
     id: 'clm_005',
@@ -159,5 +163,6 @@ export const claims: Claim[] = [
     workflow: 'New',
     notes: '',
     statementSent: false,
+    statementSent2nd: false,
   },
 ];

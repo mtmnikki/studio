@@ -71,6 +71,7 @@ export default function ImportPage() {
               workflow: row["Workflow"] || 'New',
               notes: row["Notes"] || '',
               statementSent: row["1st Statement Sent?"]?.toLowerCase() === 'true',
+              statementSent2nd: row["2nd Statement Sent?"]?.toLowerCase() === 'true',
             };
           });
 

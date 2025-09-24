@@ -41,33 +41,25 @@ import type { Claim } from "@/lib/types";
 import { useClaims } from "@/hooks/use-claims";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
+const noteOptions = [
+    "We will not receive payment",
+    "Paid- see payment on other influenza test",
+    "Patient Meeting Deductible/Co-insurance",
+    "The impact of prior payer(s) adjudication including payments and/or adjustments. (Use only with Group Code OA)",
+    "Payment Received",
+    "Reversed Claim",
+];
+
 export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] }) {
-  const { claims, setClaims, getClaimStatus, removeClaims, updateClaim } = useClaims(initialClaims);
+  const { claims, setClaims, removeClaims, updateClaim } = useClaims(initialClaims);
   const { toast } = useToast();
   const router = useRouter();
 
   const [filter, setFilter] = React.useState<"all" | "needed" | "sent">("all");
   const [selectedClaimIds, setSelectedClaimIds] = React.useState<string[]>([]);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
-  const [editingClaimId, setEditingClaimId] = React.useState<string | null>(null);
-  const [editingData, setEditingData] = React.useState<Partial<Claim>>({});
-
+  
   const filteredClaims = React.useMemo(() => {
-    if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search);
-      const updatedPatientId = urlParams.get('updatedPatient');
-      if (updatedPatientId) {
-        setTimeout(() => {
-          setClaims(prevClaims => 
-            prevClaims.map(c => 
-              c.patientId === updatedPatientId ? { ...c, statementSent: true } : c
-            )
-          );
-          window.history.replaceState({}, document.title, window.location.pathname);
-        }, 0);
-      }
-    }
-    
     const claimsToFilter = claims;
     switch (filter) {
       case 'needed':
@@ -78,7 +70,7 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
       default:
         return claimsToFilter;
     }
-  }, [claims, filter, setClaims, getClaimStatus]);
+  }, [claims, filter]);
 
   React.useEffect(() => {
     setSelectedClaimIds([]);
@@ -100,39 +92,12 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
     }
   };
   
-  const handleEdit = (claim: Claim) => {
-    setEditingClaimId(claim.id);
-    setEditingData(claim);
-  };
-  
-  const handleCancelEdit = () => {
-    setEditingClaimId(null);
-    setEditingData({});
-  };
-  
-  const handleSave = () => {
-    if (editingClaimId && editingData.id) {
-      updateClaim(editingData as Claim);
-      toast({
-        title: "Claim Updated",
-        description: "The claim has been successfully updated.",
-      });
-      handleCancelEdit();
+  const handleFieldChange = (claimId: string, field: keyof Claim, value: any) => {
+    const claim = claims.find(c => c.id === claimId);
+    if (claim) {
+      updateClaim({ ...claim, [field]: value });
     }
   };
-  
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setEditingData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSelectChange = (name: string, value: string) => {
-    setEditingData(prev => ({ ...prev, [name]: value }));
-  }
-
-  const handleCheckboxChange = (name: string, checked: boolean) => {
-    setEditingData(prev => ({ ...prev, [name]: checked }));
-  }
 
   const numSelected = selectedClaimIds.length;
   const isAllSelected = numSelected > 0 && numSelected === filteredClaims.length;
@@ -155,61 +120,67 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
   };
 
   const renderCell = (claim: Claim, field: keyof Claim) => {
-    const isEditing = editingClaimId === claim.id;
-    const isEditableField = ['paymentStatus', 'postingStatus', 'workflow', 'notes', 'statementSent'].includes(field);
-
-    if (isEditing && isEditableField) {
-      if (field === 'paymentStatus') {
-        return (
-          <Select name="paymentStatus" value={editingData.paymentStatus} onValueChange={(value) => handleSelectChange('paymentStatus', value)}>
-            <SelectTrigger className="h-8 w-[100px]"><SelectValue placeholder="Select Status" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="PAID">PAID</SelectItem>
-              <SelectItem value="DENIED">DENIED</SelectItem>
-              <SelectItem value="PENDING">PENDING</SelectItem>
-            </SelectContent>
-          </Select>
-        )
-      }
-      if (field === 'postingStatus') {
-        return (
-          <Select name="postingStatus" value={editingData.postingStatus} onValueChange={(value) => handleSelectChange('postingStatus', value)}>
-            <SelectTrigger className="h-8 w-[110px]"><SelectValue placeholder="Select Status" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Posted">Posted</SelectItem>
-              <SelectItem value="Unposted">Unposted</SelectItem>
-            </SelectContent>
-          </Select>
-        )
-      }
-      if (field === 'statementSent') {
-          return (
-             <Checkbox
-                checked={editingData.statementSent}
-                onCheckedChange={(checked) => handleCheckboxChange('statementSent', !!checked)}
-              />
-          )
-      }
-      return (
-        <Input
-          name={field}
-          value={editingData[field] as string | number}
-          onChange={handleInputChange}
-          className="h-8"
-        />
-      );
-    }
-    
     const cellValue = claim[field];
-    if (field === 'statementSent') {
-      return (
-        <Badge variant={cellValue ? 'default' : 'outline'}>
-          {cellValue ? 'Yes' : 'No'}
-        </Badge>
-      );
-    }
+    
     if (field === 'paymentStatus') {
-      return <Badge variant={claim.paymentStatus === 'PAID' ? "secondary" : claim.paymentStatus === 'PENDING' ? 'outline' : "destructive"}>{claim.paymentStatus}</Badge>
+      return (
+        <Select value={claim.paymentStatus} onValueChange={(value) => handleFieldChange(claim.id, 'paymentStatus', value)}>
+          <SelectTrigger className="h-8 w-[110px] bg-transparent border-0 shadow-none focus:ring-0">
+            <Badge variant={claim.paymentStatus === 'PAID' ? "secondary" : claim.paymentStatus === 'PENDING' ? 'outline' : "destructive"}>{claim.paymentStatus}</Badge>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="PAID">PAID</SelectItem>
+            <SelectItem value="DENIED">DENIED</SelectItem>
+            <SelectItem value="PENDING">PENDING</SelectItem>
+          </SelectContent>
+        </Select>
+      )
+    }
+    if (field === 'postingStatus') {
+      return (
+        <Select value={claim.postingStatus} onValueChange={(value) => handleFieldChange(claim.id, 'postingStatus', value)}>
+          <SelectTrigger className="h-8 w-[120px] bg-transparent border-0 shadow-none focus:ring-0">
+             <SelectValue placeholder="Select Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Posted">Posted</SelectItem>
+            <SelectItem value="Unposted">Unposted</SelectItem>
+          </SelectContent>
+        </Select>
+      )
+    }
+     if (field === 'notes') {
+      return (
+        <Select value={claim.notes} onValueChange={(value) => handleFieldChange(claim.id, 'notes', value)}>
+          <SelectTrigger className="h-8 w-[200px] bg-transparent border-0 shadow-none focus:ring-0">
+             <div className="truncate">{claim.notes || <span className="text-muted-foreground">Select note...</span>}</div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">None</SelectItem>
+            {noteOptions.map(option => (
+              <SelectItem key={option} value={option}>{option}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )
+    }
+    if (field === 'statementSent') {
+        return (
+           <Checkbox
+              className="mx-auto block"
+              checked={!!cellValue}
+              onCheckedChange={(checked) => handleFieldChange(claim.id, 'statementSent', !!checked)}
+            />
+        )
+    }
+    if (field === 'statementSent2nd') {
+        return (
+           <Checkbox
+              className="mx-auto block"
+              checked={!!cellValue}
+              onCheckedChange={(checked) => handleFieldChange(claim.id, 'statementSent2nd', !!checked)}
+            />
+        )
     }
      if (typeof cellValue === 'number' && ['amount', 'paid', 'adjustment', 'patientPay'].includes(field)) {
       return `$${cellValue.toFixed(2)}`;
@@ -281,7 +252,8 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
                     <TableHead className="whitespace-nowrap">Posting Status</TableHead>
                     <TableHead className="whitespace-nowrap">Workflow</TableHead>
                     <TableHead className="whitespace-nowrap">Notes</TableHead>
-                    <TableHead className="whitespace-nowrap">1st Stmt Sent?</TableHead>
+                    <TableHead className="whitespace-nowrap text-center">1st Stmt Sent?</TableHead>
+                    <TableHead className="whitespace-nowrap text-center">2nd Stmt Sent?</TableHead>
                     <TableHead>
                       <span className="sr-only">Actions</span>
                     </TableHead>
@@ -313,20 +285,20 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
                         <TableCell className="whitespace-nowrap text-right">${claim.paid.toFixed(2)}</TableCell>
                         <TableCell className="whitespace-nowrap text-right">${claim.adjustment.toFixed(2)}</TableCell>
                         <TableCell className="whitespace-nowrap text-right">${claim.patientPay.toFixed(2)}</TableCell>
-                        <TableCell>{renderCell(claim, 'paymentStatus')}</TableCell>
+                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'paymentStatus')}</TableCell>
                         <TableCell className="whitespace-nowrap">{renderCell(claim, 'postingStatus')}</TableCell>
-                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'workflow')}</TableCell>
+                        <TableCell className="whitespace-nowrap">
+                            <Input 
+                                value={claim.workflow}
+                                onChange={(e) => handleFieldChange(claim.id, 'workflow', e.target.value)}
+                                className="h-8 w-[120px] bg-transparent border-0 shadow-none focus:ring-0"
+                             />
+                        </TableCell>
                         <TableCell className="whitespace-nowrap">{renderCell(claim, 'notes')}</TableCell>
-                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'statementSent')}</TableCell>
+                        <TableCell className="whitespace-nowrap text-center">{renderCell(claim, 'statementSent')}</TableCell>
+                        <TableCell className="whitespace-nowrap text-center">{renderCell(claim, 'statementSent2nd')}</TableCell>
                         <TableCell>
-                           {editingClaimId === claim.id ? (
-                            <div className="flex items-center gap-2">
-                              <Button onClick={handleSave} size="icon" variant="ghost"><Save className="h-4 w-4" /></Button>
-                              <Button onClick={handleCancelEdit} size="icon" variant="ghost"><XCircle className="h-4 w-4" /></Button>
-                            </div>
-                          ) : (
                             <div className="flex items-center">
-                              <Button onClick={() => handleEdit(claim)} size="icon" variant="ghost"><Edit className="h-4 w-4" /></Button>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button aria-haspopup="true" size="icon" variant="ghost">
@@ -345,13 +317,12 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </div>
-                          )}
                         </TableCell>
                       </TableRow>
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={22} className="h-24 text-center">
+                      <TableCell colSpan={23} className="h-24 text-center">
                         No claims found for this filter.
                       </TableCell>
                     </TableRow>
@@ -379,6 +350,3 @@ export function ClaimsTableClient({ initialClaims }: { initialClaims: Claim[] })
     </Tabs>
   );
 }
-
-    
-    

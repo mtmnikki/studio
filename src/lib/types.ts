@@ -34,4 +34,5 @@ export interface Claim {
   workflow: string; // From options in image
   notes: string;
   statementSent: boolean; // 1st Statement Sent?
+  statementSent2nd: boolean; // 2nd Statement Sent?
 }
