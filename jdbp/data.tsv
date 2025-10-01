@@ -1,0 +1,5 @@
+account_number	patient_name	date_of_birth	address	service_date	cpt_hcpcs_code	pharmacy_of_service	total_charged_amount	insurance_adjustment	insurance_paid	patient_responsibility	billing_status	patient_paid_amount	account_balance	notes	statment_created_date	statement_mailed	statement_two_mailed	statement_three_mailed	statement_paid
+1001	Jane Smith	5/10/1985	456 Oak Ave	9/15/2025	99203	City Pharmacy	150	50	100	0	Refund	25	-25	Follow-up needed	9/21/2025	9/22/2025	10/1/2025		9/20/2025
+1002	Robert Johnson	11/22/1978	789 Pine Ln	9/16/2025	99204	Town Pharmacy	79	37	0	42	Bill	0	42		9/22/2025				
+1003	Emily Davis	3/18/1992	101 Maple Dr	9/17/2025	99203	City Pharmacy	100	0	0	100	Bill	20	80			9/10/2025			9/20/2025
+1004	Michael Brown	8/1/1965	202 Birch Rd	9/18/2025	99203	City Pharmacy	150	0	150	0	Refund	0	0		6/19/2025	6/20/2025	7/20/2025	8/20/2025	

@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 198 100% 96%;
+    --foreground: 225 71% 6%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 222 89% 66%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 200 90% 88%;
+    --secondary-foreground: 221 39% 20%;
+
+    --muted: 199 100% 92%;
+    --muted-foreground: 214 32% 35%;
+
+    --accent: 188 76% 76%;
+    --accent-foreground: 206 74% 18%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 200 54% 89%;
+    --input: 200 54% 89%;
+    --ring: 198 100% 60%;
+
+    --radius: 0.85rem;
+  }
+
+  .dark {
+    --background: 225 25% 8%;
+    --foreground: 0 0% 100%;
+    --card: 222 30% 18%;
+    --card-foreground: 0 0% 100%;
+    --popover: 222 30% 18%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 222 89% 66%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 199 60% 30%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 199 60% 30%;
+    --muted-foreground: 199 100% 80%;
+    --accent: 188 76% 66%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 40%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 210 45% 26%;
+    --input: 210 45% 26%;
+    --ring: 198 100% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply min-h-screen bg-background text-foreground;
+    background-image: radial-gradient(circle at top left, hsla(217, 91%, 60%, 0.35), transparent 45%),
+      radial-gradient(circle at bottom right, hsla(184, 76%, 65%, 0.35), transparent 40%),
+      linear-gradient(135deg, hsla(226, 95%, 78%, 0.4), hsla(199, 100%, 82%, 0.6));
+    background-attachment: fixed;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply rounded-3xl border border-white/40 bg-white/30 shadow-xl backdrop-blur-xl;
+  }
+
+  .glow-ring {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4), 0 20px 45px rgba(56, 189, 248, 0.35);
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background-color: #fff;
+  }
+}

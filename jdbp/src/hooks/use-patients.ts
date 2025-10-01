@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 
 export function usePatients(initialPatients: Patient[] = []) {
   const supabase = createClient();
-  const { data, isLoading, error } = useCollection<Patient>("patients", "last_name", true);
+  const { data, isLoading, error } = useCollection<Patient>('patients', 'last_name', true);
 
   const patients = React.useMemo(() => {
     const values = data ?? initialPatients ?? [];
@@ -20,14 +20,16 @@ export function usePatients(initialPatients: Patient[] = []) {
 
   const updatePatient = React.useCallback(
     async (patientId: string, updates: Partial<Patient>) => {
-      const { error: updateError } = await supabase
-        .from("patients")
-        .update(updates)
-        .eq("id", patientId);
+      try {
+        const { error } = await supabase
+          .from('patients')
+          .update(updates)
+          .eq('id', patientId);
 
-      if (updateError) {
-        console.error("Error updating patient:", updateError);
-        throw updateError;
+        if (error) throw error;
+      } catch (error) {
+        console.error("Error updating patient:", error);
+        throw error;
       }
     },
     [supabase]
