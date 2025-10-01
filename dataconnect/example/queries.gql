@@ -1,0 +1,24 @@
+query ListPatients @auth(level: USER) {
+  patients {
+    id
+    name
+    email
+  }
+}
+
+mutation AddPharmacy($name: String!, $address: String!) @auth(level: USER) {
+  pharmacy_insert(data: {name: $name, address: $address})
+}
+
+query GetClaimsForPatient($patientId: UUID!) @auth(level: USER) {
+  claims(where: {patientId: {eq: $patientId}}) {
+    id
+    serviceDate
+    totalChargedAmount
+    patientResponsibility
+  }
+}
+
+mutation UpdateStatementPaidStatus($statementId: UUID!, $statementPaid: Boolean!) @auth(level: USER) {
+  statement_update(key: {id: $statementId}, data: {statementPaid: $statementPaid})
+}

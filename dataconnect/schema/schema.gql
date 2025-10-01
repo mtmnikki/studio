@@ -1,0 +1,41 @@
+type Pharmacy @table {
+  name: String!
+  address: String!
+  phone: String
+  email: String
+}
+
+type Patient @table {
+  accountNumber: String!
+  name: String!
+  dateOfBirth: Date!
+  address: String
+  phone: String
+  email: String
+}
+
+type Claim @table {
+  serviceDate: Date!
+  cptHcpcsCode: String!
+  totalChargedAmount: Float!
+  billingStatus: String!
+  patientResponsibility: Float!
+  accountBalance: Float!
+  patient: Patient
+  pharmacy: Pharmacy
+  insuranceAdjustment: Float
+  insurancePaid: Float
+  patientPaidAmount: Float
+  notes: String
+}
+
+type Statement @table {
+  statementCreatedDate: Date!
+  amountDue: Float!
+  patient: Patient
+  statementMailed: Date
+  statementTwoMailed: Date
+  statementThreeMailed: Date
+  statementPaid: Boolean
+  pdfFileUrl: String
+}

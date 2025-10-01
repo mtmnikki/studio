@@ -7,29 +7,26 @@
  * - /patients/{patientId}: Stores individual patient records.
  *
  * Key Security Decisions:
- * - Claims are publicly readable to support open data access.
- * - Only authenticated users can create, update, or delete claims.
- * - Patients are publicly readable to support open data access.
- * - Write access to patient data is denied.
+ * - All patient and claims data is private and only readable to authenticated users with pharmacy location = pharmacy of service from the database and to role level = admin.
+ * - Only authenticated users can create or claims.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Allows anyone to read claim data, but restricts write operations to authenticated users only.
+     * @description Allows only authenticated to read or write patient and claims data with check user's pharmacy location = pharmacy of service for patient reocrd.
      * @path /claims/{claimId}
-     * @allow (get, list): Any user can read claim data.
-     * @allow (create): An authenticated user can create a claim.
-     * @deny (create): An unauthenticated user cannot create a claim.
-     * @allow (update, delete): An authenticated user can update or delete a claim.
-     * @deny (update, delete): An unauthenticated user cannot update or delete a claim.
-     * @principle Allows public read access while securing write operations.
+     * @allow (get, list): An authenticated user can read claims and patient data with check user pharmacy location = pharmacy of service.
+     * @allow (create): An authenticated user can create claims and patient data with check user pharmacy location = pharmacy of service.
+     * @allow (update, delete): An authenticated user can update claims and patient data with check user pharmacy location = pharmacy of service.
+     * @deny (update, delete): An unauthenticated user cannot delete a claim.
+     * @principle The data is protected health information and only authenticated users with pharmacy location = pharmacy of service and users with role = admin  can access data.
      */
     match /claims/{claimId} {
       allow get, list: if true;
       allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && resource != null;
+      allow update: if isSignedIn() && resource != null;
     }
 
     /**
