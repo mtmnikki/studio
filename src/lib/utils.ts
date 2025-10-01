@@ -7,15 +7,20 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function calculateAccountNumber(patient: Patient): string {
-  const rawDob = typeof patient.dateOfBirth === 'string' && patient.dateOfBirth.includes('-')
-    ? patient.dateOfBirth
-    : '1900-01-01';
-  const [year = '1900', month = '01', day = '01'] = rawDob.split('-');
+  const firstInitial = (patient.firstName?.charAt(0) ?? patient.patientName?.charAt(0) ?? "P").toUpperCase();
+  const lastInitial = (patient.lastName?.charAt(0) ?? patient.patientName?.split(" ")?.at(-1)?.charAt(0) ?? "N").toUpperCase();
+  const dob = patient.dateOfBirth;
 
-  const firstInitial = (patient.firstName?.charAt(0) || 'X').toUpperCase();
-  const lastInitial = (patient.lastName?.charAt(0) || 'X').toUpperCase();
+  if (!dob || typeof dob !== "string" || !dob.includes("-")) {
+    const nowSuffix = new Date().toISOString().slice(2, 8).replace(/[^0-9]/g, "");
+    return `${firstInitial}${nowSuffix}${lastInitial}`;
+  }
 
-  return `${firstInitial}${month}0${day}${lastInitial}${year}`;
+  const [year = "0000", month = "00", day = "00"] = dob.split("-");
+  const paddedMonth = month.padStart(2, "0");
+  const paddedDay = day.padStart(2, "0");
+
+  return `${firstInitial}${paddedMonth}0${paddedDay}${lastInitial}${year}`;
 }
 
 export function parseCurrency(value: unknown): number {

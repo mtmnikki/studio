@@ -12,8 +12,11 @@ import type { StatementData } from "@/lib/statement-data";
 import {
   fetchStatementDataByClaimId,
 } from "@/lib/statement-data";
-import { initializeFirebase } from "@/firebase";
 import { calculateAccountNumber } from "@/lib/utils";
+import { generateStatementPDF, uploadStatementPDF } from "@/lib/pdf-generator";
+import { createClient } from "@/lib/supabase/client";
+import { Download } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 function formatDate(dateString: string) {
   const date = new Date(dateString);
@@ -35,25 +38,6 @@ function StatementDetails({ data }: { data: StatementData }) {
     statementDate.getTime() + 30 * 24 * 60 * 60 * 1000
   );
 
-  const patientName = [patient.firstName, patient.lastName]
-    .filter((part) => !!part)
-    .map((part) => String(part).toUpperCase())
-    .join(" ") || patient.id.toUpperCase();
-
-  const addressLine1 = patient.address?.street
-    ? patient.address.street.toUpperCase()
-    : "ADDRESS UNAVAILABLE";
-
-  const addressLine2Parts = [
-    patient.address?.city,
-    patient.address?.state,
-    patient.address?.zip,
-  ]
-    .filter((part) => !!part)
-    .map((part) => String(part).toUpperCase());
-
-  const addressLine2 = addressLine2Parts.join(", ");
-
   return (
     <div className="bg-card p-8 rounded-lg shadow-sm border text-black">
       {/* Header */}
@@ -71,9 +55,14 @@ function StatementDetails({ data }: { data: StatementData }) {
 
       {/* Patient Info */}
       <section className="mb-6">
-        <p className="font-bold">{patientName}</p>
-        <p>{addressLine1}</p>
-        {addressLine2 && <p>{addressLine2}</p>}
+        <p className="font-bold">
+          {patient.firstName.toUpperCase()} {patient.lastName.toUpperCase()}
+        </p>
+        <p>{patient.address.street.toUpperCase()}</p>
+        <p>
+          {patient.address.city.toUpperCase()}, {patient.address.state.toUpperCase()} {" "}
+          {patient.address.zip}
+        </p>
       </section>
 
       {/* Summary Table */}
@@ -196,9 +185,14 @@ function StatementDetails({ data }: { data: StatementData }) {
         {/* Right side: Mailing address for window envelope */}
         <div className="text-xs">
           <div className="pl-8 pt-12">
-            <p className="font-bold">{patientName}</p>
-            <p>{addressLine1}</p>
-            {addressLine2 && <p>{addressLine2}</p>}
+            <p className="font-bold">
+              {patient.firstName.toUpperCase()} {patient.lastName.toUpperCase()}
+            </p>
+            <p>{patient.address.street.toUpperCase()}</p>
+            <p>
+              {patient.address.city.toUpperCase()}, {patient.address.state.toUpperCase()} {" "}
+              {patient.address.zip}
+            </p>
           </div>
         </div>
       </div>
@@ -210,20 +204,16 @@ export default function StatementPage({ params }: { params: { id: string } }) {
   const [data, setData] = React.useState<StatementData | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
-  const { firestore } = initializeFirebase();
+  const [isDownloading, setIsDownloading] = React.useState(false);
+  const supabase = createClient();
+  const { toast } = useToast();
 
   React.useEffect(() => {
     let isMounted = true;
 
-    if (!firestore) {
-      setIsLoading(false);
-      setErrorMessage("We couldn't connect to Firestore. Please refresh the page or try again later.");
-      return;
-    }
-
     setIsLoading(true);
 
-    fetchStatementDataByClaimId(firestore, params.id, calculateAccountNumber)
+    fetchStatementDataByClaimId(params.id, calculateAccountNumber)
       .then((statementData) => {
         if (!isMounted) return;
         if (!statementData) {
@@ -247,7 +237,57 @@ export default function StatementPage({ params }: { params: { id: string } }) {
     return () => {
       isMounted = false;
     };
-  }, [firestore, params.id]);
+  }, [params.id]);
+
+  const handleDownloadPDF = async () => {
+    if (!data) return;
+
+    setIsDownloading(true);
+    try {
+      // Generate PDF
+      const pdf = generateStatementPDF(data);
+
+      // Upload to Supabase storage
+      const filePath = await uploadStatementPDF(
+        pdf,
+        data.patient.id,
+        data.accountNumber,
+        supabase
+      );
+
+      if (filePath) {
+        // Track in generated_statements table
+        await supabase.from('generated_statements').insert({
+          patient_id: data.patient.id,
+          account_number: data.accountNumber,
+          statement_date: data.statementDate,
+          statement_type: 'first',
+          total_amount: data.totalAmountDue,
+          pdf_path: filePath,
+          claim_ids: data.claims.map(c => c.id),
+          pharmacy_of_service: data.claims[0]?.pharmacyOfService,
+          sent: false,
+        });
+      }
+
+      // Download the PDF
+      pdf.save(`statement_${data.accountNumber}_${Date.now()}.pdf`);
+
+      toast({
+        title: "PDF Downloaded",
+        description: "Statement has been downloaded and saved to storage.",
+      });
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      toast({
+        title: "Download Failed",
+        description: "Failed to generate PDF statement.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -296,10 +336,21 @@ export default function StatementPage({ params }: { params: { id: string } }) {
               Back to Dashboard
             </Link>
           </Button>
-          <PrintStatementButton
-            claimIds={data.claims.map((claim) => claim.id)}
-            patientId={data.patient.id}
-          />
+          <div className="flex gap-2">
+            <Button
+              onClick={handleDownloadPDF}
+              disabled={isDownloading}
+              variant="outline"
+              className="rounded-full border-slate-200 bg-white/70 px-5 text-slate-600 shadow-sm hover:bg-white"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              {isDownloading ? "Generating..." : "Download PDF"}
+            </Button>
+            <PrintStatementButton
+              claimIds={data.claims.map((claim) => claim.id)}
+              patientId={data.patient.id}
+            />
+          </div>
         </div>
 
         <div className="rounded-3xl border border-white/70 bg-white/90 p-8 shadow-2xl">

@@ -1,19 +1,19 @@
 
+
 "use client";
 
 import {
   FileUp,
-  FolderOpen,
   Home,
-  NotebookPen,
   Users,
   Building2,
+  StickyNote,
+  Cloud,
   LogOut,
 } from "lucide-react";
 import Link from "next/link";
-import React from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { signOut } from "firebase/auth";
+import React from "react";
 
 import {
   Tooltip,
@@ -22,52 +22,41 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Logo } from "@/components/icons";
-import { Button } from "@/components/ui/button";
-import { FirebaseClientProvider, useAuth, useUser } from "@/firebase";
-import { useToast } from "@/hooks/use-toast";
+import { createClient } from "@/lib/supabase/client";
 
 function AppAuthenticatedLayout({ children }: { children: React.ReactNode }) {
-  const auth = useAuth();
-  const { user, isUserLoading } = useUser();
   const router = useRouter();
   const pathname = usePathname();
-  const { toast } = useToast();
-  const [isSigningOut, setIsSigningOut] = React.useState(false);
+  const [user, setUser] = React.useState<any>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const supabase = createClient();
 
   React.useEffect(() => {
-    if (!isUserLoading && !user) {
-      const redirectTarget = pathname && pathname !== "/" ? pathname : "/dashboard";
-      router.replace(`/login?redirect=${encodeURIComponent(redirectTarget)}`);
+    // Check current session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setIsLoading(false);
+    });
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setIsLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [supabase.auth]);
+
+  React.useEffect(() => {
+    // If user is not logged in and not loading, redirect to login page.
+    if (!user && !isLoading) {
+      router.replace('/login');
     }
-  }, [isUserLoading, user, pathname, router]);
+  }, [user, isLoading, router]);
 
-  const handleSignOut = React.useCallback(async () => {
-    if (!auth || isSigningOut) return;
-
-    setIsSigningOut(true);
-    try {
-      await signOut(auth);
-      toast({
-        title: "Signed out",
-        description: "You have been signed out of Jenn's Billing Studio.",
-      });
-      router.replace("/login");
-    } catch (error) {
-      console.error("Failed to sign out", error);
-      toast({
-        title: "Unable to sign out",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Please refresh the page and try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSigningOut(false);
-    }
-  }, [auth, isSigningOut, toast, router]);
-
-  if (isUserLoading) {
+  if (isLoading || !user) {
     return (
       <div className="flex justify-center items-center h-screen">
         <p>Loading...</p>
@@ -75,146 +64,135 @@ function AppAuthenticatedLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(165,243,252,0.35),_transparent_60%),_linear-gradient(135deg,_rgba(99,102,241,0.25),_rgba(20,184,166,0.25))]">
-        <p className="rounded-full bg-white/70 px-4 py-2 text-sm text-slate-600 shadow">Redirecting to login…</p>
-      </div>
-    );
-  }
+  const navLinks = [
+    { href: "/dashboard", label: "Dashboard", icon: Home },
+    { href: "/patients", label: "Patients", icon: Users },
+    { href: "/pharmacies", label: "Pharmacies", icon: Building2 },
+    { href: "/import", label: "Import Data", icon: FileUp },
+    { href: "/notes", label: "Jenn's Notes", icon: StickyNote },
+    { href: "/storage", label: "File Library", icon: Cloud },
+  ];
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
   return (
-    <div className="relative flex min-h-screen w-full flex-col bg-[radial-gradient(circle_at_top,_rgba(165,243,252,0.35),_transparent_60%),_linear-gradient(135deg,_rgba(99,102,241,0.25),_rgba(20,184,166,0.25))]">
-        <aside className="fixed inset-y-0 left-0 z-20 hidden w-20 flex-col border-r border-white/30 bg-white/20 pb-6 pt-5 shadow-xl backdrop-blur-xl sm:flex">
-          <nav className="flex h-full flex-col items-center gap-6">
-            <Link
-              href="/dashboard"
-              className="group flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 via-sky-500 to-teal-400 text-lg font-semibold text-white shadow-lg transition-all hover:shadow-2xl"
-            >
-              <Logo className="h-6 w-6 transition-transform group-hover:scale-110" />
-              <span className="sr-only">Jenn's Billing Studio</span>
-            </Link>
-            <TooltipProvider delayDuration={100}>
-              <div className="flex flex-1 flex-col items-center gap-3">
-                <Tooltip>
+    <div className="flex min-h-screen w-full flex-col bg-transparent">
+      <aside className="fixed inset-y-0 left-0 z-20 hidden w-20 flex-col border-r border-white/30 bg-white/40 pb-6 pt-8 shadow-2xl shadow-indigo-200/40 backdrop-blur-2xl sm:flex">
+        <nav className="flex flex-1 flex-col items-center gap-6 px-3">
+          <Link
+            href="/dashboard"
+            className="group flex h-12 w-12 items-center justify-center rounded-3xl bg-gradient-to-br from-indigo-500 to-sky-500 text-white shadow-xl shadow-sky-400/40 transition hover:scale-105"
+          >
+            <Logo className="h-5 w-5 transition-transform group-hover:rotate-6" />
+            <span className="sr-only">Jenn's Billing</span>
+          </Link>
+          <TooltipProvider delayDuration={80}>
+            {navLinks.map((item) => {
+              const isActive = pathname.startsWith(item.href);
+              return (
+                <Tooltip key={item.href}>
                   <TooltipTrigger asChild>
                     <Link
-                      href="/dashboard"
-                      className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/40 text-slate-700 shadow-sm transition-all hover:translate-x-1 hover:bg-white/70 hover:text-slate-900"
+                      href={item.href}
+                      className={`flex h-11 w-11 items-center justify-center rounded-2xl border border-white/30 text-slate-600 shadow transition ${isActive
+                          ? "bg-gradient-to-br from-indigo-400 to-sky-400 text-white"
+                          : "bg-white/40 hover:bg-white/70 hover:text-slate-900"
+                        }`}
                     >
-                      <Home className="h-5 w-5" />
-                      <span className="sr-only">Dashboard</span>
+                      <item.icon className="h-5 w-5" />
+                      <span className="sr-only">{item.label}</span>
                     </Link>
                   </TooltipTrigger>
-                  <TooltipContent side="right">Dashboard</TooltipContent>
+                  <TooltipContent side="right" className="rounded-xl border border-white/40 bg-white/80 text-slate-600 shadow">
+                    {item.label}
+                  </TooltipContent>
                 </Tooltip>
+              );
+            })}
+          </TooltipProvider>
+        </nav>
+        <div className="flex flex-col items-center gap-3 px-2">
+            <TooltipProvider delayDuration={80}>
                 <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Link
-                      href="/patients"
-                      className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/40 text-slate-700 shadow-sm transition-all hover:translate-x-1 hover:bg-white/70 hover:text-slate-900"
-                    >
-                      <Users className="h-5 w-5" />
-                      <span className="sr-only">Patients</span>
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">Patients</TooltipContent>
+                    <TooltipTrigger asChild>
+                        <button
+                          onClick={handleSignOut}
+                          className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/30 text-slate-600 shadow transition bg-white/40 hover:bg-white/70 hover:text-slate-900"
+                        >
+                            <LogOut className="h-5 w-5" />
+                            <span className="sr-only">Sign Out</span>
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="rounded-xl border border-white/40 bg-white/80 text-slate-600 shadow">
+                        Sign Out
+                    </TooltipContent>
                 </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Link
-                      href="/pharmacies"
-                      className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/40 text-slate-700 shadow-sm transition-all hover:translate-x-1 hover:bg-white/70 hover:text-slate-900"
-                    >
-                      <Building2 className="h-5 w-5" />
-                      <span className="sr-only">Pharmacies</span>
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">Pharmacies</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Link
-                      href="/notes"
-                      className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/40 text-slate-700 shadow-sm transition-all hover:translate-x-1 hover:bg-white/70 hover:text-slate-900"
-                    >
-                      <NotebookPen className="h-5 w-5" />
-                      <span className="sr-only">Notes</span>
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">Notes</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Link
-                      href="/files"
-                      className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/40 text-slate-700 shadow-sm transition-all hover:translate-x-1 hover:bg-white/70 hover:text-slate-900"
-                    >
-                      <FolderOpen className="h-5 w-5" />
-                      <span className="sr-only">Files</span>
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">Files</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Link
-                      href="/import"
-                      className="mt-auto flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 via-sky-500 to-teal-400 text-white shadow-lg transition-all hover:translate-x-1 hover:shadow-xl"
-                    >
-                      <FileUp className="h-5 w-5" />
-                      <span className="sr-only">Import</span>
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">Import data</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={handleSignOut}
-                      disabled={isSigningOut}
-                      className="mt-2 flex h-11 w-11 items-center justify-center rounded-xl bg-white/40 text-slate-700 shadow-sm transition-all hover:translate-x-1 hover:bg-white/70 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <LogOut className="h-5 w-5" />
-                      <span className="sr-only">Log out</span>
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">Log out</TooltipContent>
-                </Tooltip>
-              </div>
             </TooltipProvider>
-          </nav>
-        </aside>
-        <div className="flex flex-col sm:pl-20">
-          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-white/70 px-4 py-3 shadow-lg backdrop-blur-lg sm:hidden">
-            <Link href="/dashboard" className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <Logo className="h-5 w-5" />
-              Jenn's Billing
-            </Link>
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-              <Link href="/patients" className="rounded-full bg-white/80 px-3 py-1 shadow">Patients</Link>
-              <Link href="/pharmacies" className="rounded-full bg-white/80 px-3 py-1 shadow">Pharmacies</Link>
-              <Link href="/notes" className="rounded-full bg-white/80 px-3 py-1 shadow">Notes</Link>
-              <Link href="/files" className="rounded-full bg-white/80 px-3 py-1 shadow">Files</Link>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSignOut}
-              disabled={isSigningOut}
-              className="text-xs"
-            >
-              Log out
-            </Button>
-          </div>
-          <main className="relative flex-1 space-y-6 p-4 sm:p-8">
-            <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.15),_transparent_55%)]" />
-            <div className="absolute inset-0 -z-20 bg-[radial-gradient(circle_at_bottom,_rgba(20,184,166,0.15),_transparent_55%)]" />
-            <div className="relative space-y-6">
-              {children}
-            </div>
-          </main>
         </div>
+      </aside>
+      <div className="flex flex-col sm:pl-20">
+        <header className="sticky top-0 z-10 border-b border-white/40 bg-white/60 px-4 py-4 shadow-sm shadow-sky-100/60 backdrop-blur">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-400 to-sky-500 text-white shadow-lg">
+                <Logo className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Jenn's Dream Billing</p>
+                <p className="text-lg font-semibold text-slate-700">Carefully curated statements</p>
+              </div>
+            </div>
+            <nav className="hidden gap-2 md:flex">
+              {navLinks.map((item) => {
+                const isActive = pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`rounded-full border border-white/50 px-4 py-2 text-sm font-medium shadow-sm transition ${isActive
+                        ? "bg-gradient-to-r from-indigo-400 to-sky-500 text-white"
+                        : "bg-white/60 text-slate-600 hover:bg-white hover:text-slate-900"
+                      }`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+        </header>
+        <main className="flex-1 p-4 sm:p-8">
+          <div className="glass-panel glow-ring min-h-[calc(100vh-7rem)] w-full p-6 sm:p-8">
+            {children}
+          </div>
+        </main>
+      </div>
+      <nav className="fixed inset-x-4 bottom-4 z-30 flex items-center justify-around rounded-3xl border border-white/40 bg-white/70 px-4 py-3 shadow-2xl shadow-sky-200/50 backdrop-blur md:hidden">
+        {navLinks.map((item) => {
+          const isActive = pathname.startsWith(item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex flex-col items-center gap-1 text-xs font-medium transition ${isActive ? "text-sky-600" : "text-slate-500 hover:text-slate-700"
+                }`}
+            >
+              <item.icon className="h-5 w-5" />
+              {item.label.split(" ")[0]}
+            </Link>
+          );
+        })}
+         <button
+            onClick={handleSignOut}
+            className="flex flex-col items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-700"
+        >
+            <LogOut className="h-5 w-5" />
+            Sign Out
+        </button>
+      </nav>
     </div>
   );
 }
@@ -222,8 +200,6 @@ function AppAuthenticatedLayout({ children }: { children: React.ReactNode }) {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <FirebaseClientProvider>
       <AppAuthenticatedLayout>{children}</AppAuthenticatedLayout>
-    </FirebaseClientProvider>
   );
 }

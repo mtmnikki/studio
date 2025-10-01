@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft, Printer, Download } from "lucide-react";
 import Link from "next/link";
 import { notFound, useRouter, useSearchParams } from "next/navigation";
 
@@ -13,8 +13,9 @@ import {
   type StatementData,
 } from "@/lib/statement-data";
 import { calculateAccountNumber } from "@/lib/utils";
-import { initializeFirebase } from "@/firebase";
 import { markClaimsStatementStatus } from "@/lib/statement-actions";
+import { generateStatementPDF, uploadStatementPDF } from "@/lib/pdf-generator";
+import { createClient } from "@/lib/supabase/client";
 import { Suspense } from "react";
 
 function formatDate(date: Date) {
@@ -33,25 +34,6 @@ function Statement({ data }: { data: StatementData }) {
     statementDate.getTime() + 30 * 24 * 60 * 60 * 1000
   );
 
-  const patientName = [patient.firstName, patient.lastName]
-    .filter((part) => !!part)
-    .map((part) => String(part).toUpperCase())
-    .join(" ") || patient.id.toUpperCase();
-
-  const addressLine1 = patient.address?.street
-    ? patient.address.street.toUpperCase()
-    : "ADDRESS UNAVAILABLE";
-
-  const addressLine2Parts = [
-    patient.address?.city,
-    patient.address?.state,
-    patient.address?.zip,
-  ]
-    .filter((part) => !!part)
-    .map((part) => String(part).toUpperCase());
-
-  const addressLine2 = addressLine2Parts.join(", ");
-
   return (
     <div className="bg-card p-8 rounded-lg shadow-sm border text-black break-after-page mb-8">
       <header className="grid grid-cols-2 items-start mb-8">
@@ -67,9 +49,14 @@ function Statement({ data }: { data: StatementData }) {
       </header>
 
       <section className="mb-6">
-        <p className="font-bold">{patientName}</p>
-        <p>{addressLine1}</p>
-        {addressLine2 && <p>{addressLine2}</p>}
+        <p className="font-bold">
+          {patient.firstName?.toUpperCase() || ""} {patient.lastName?.toUpperCase() || ""}
+        </p>
+        {patient.addressStreet && <p>{patient.addressStreet.toUpperCase()}</p>}
+        <p>
+          {patient.addressCity?.toUpperCase() || ""}, {patient.addressState?.toUpperCase() || ""} {" "}
+          {patient.addressZip || ""}
+        </p>
       </section>
 
       <section className="mb-8">
@@ -110,12 +97,12 @@ function Statement({ data }: { data: StatementData }) {
               <tr key={claim.id} className="border-b">
                 <td className="p-2 border-r">{formatDate(new Date(claim.serviceDate))}</td>
                 <td className="p-2 border-r">
-                  {claim.productId}– {claim.serviceDescription}
+                  {claim.cptHcpcsCode || ""}– {claim.pharmacyOfService || "Service"}
                 </td>
-                <td className="p-2 text-right border-r">${claim.amount.toFixed(2)}</td>
-                <td className="p-2 text-right border-r">${claim.paid.toFixed(2)}</td>
-                <td className="p-2 text-right border-r">${claim.adjustment.toFixed(2)}</td>
-                <td className="p-2 text-right">${claim.patientPay.toFixed(2)}</td>
+                <td className="p-2 text-right border-r">${claim.totalChargedAmount?.toFixed(2) || "0.00"}</td>
+                <td className="p-2 text-right border-r">${claim.insurancePaid?.toFixed(2) || "0.00"}</td>
+                <td className="p-2 text-right border-r">${claim.insuranceAdjustment?.toFixed(2) || "0.00"}</td>
+                <td className="p-2 text-right">${claim.patientResponsibility?.toFixed(2) || "0.00"}</td>
               </tr>
             ))}
           </tbody>
@@ -162,9 +149,14 @@ function Statement({ data }: { data: StatementData }) {
 
         <div className="text-xs">
           <div className="pl-8 pt-12">
-            <p className="font-bold">{patientName}</p>
-            <p>{addressLine1}</p>
-            {addressLine2 && <p>{addressLine2}</p>}
+            <p className="font-bold">
+              {patient.firstName?.toUpperCase() || ""} {patient.lastName?.toUpperCase() || ""}
+            </p>
+            {patient.addressStreet && <p>{patient.addressStreet.toUpperCase()}</p>}
+            <p>
+              {patient.addressCity?.toUpperCase() || ""}, {patient.addressState?.toUpperCase() || ""} {" "}
+              {patient.addressZip || ""}
+            </p>
           </div>
         </div>
       </div>
@@ -176,10 +168,11 @@ function BulkStatementPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { toast } = useToast();
-  const { firestore } = initializeFirebase();
+  const supabase = createClient();
   const [statements, setStatements] = React.useState<StatementData[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isUpdating, setIsUpdating] = React.useState(false);
+  const [isDownloading, setIsDownloading] = React.useState(false);
 
   const patientIds = React.useMemo(
     () => searchParams.getAll("p"),
@@ -189,11 +182,6 @@ function BulkStatementPageContent() {
   React.useEffect(() => {
     let isMounted = true;
 
-    if (!firestore) {
-      setIsLoading(false);
-      return;
-    }
-
     if (!patientIds.length) {
       setIsLoading(false);
       return;
@@ -201,7 +189,7 @@ function BulkStatementPageContent() {
 
     setIsLoading(true);
 
-    fetchStatementsForPatients(firestore, patientIds, calculateAccountNumber)
+    fetchStatementsForPatients(patientIds, calculateAccountNumber)
       .then((loadedStatements) => {
         if (!isMounted) return;
         setStatements(loadedStatements);
@@ -218,21 +206,67 @@ function BulkStatementPageContent() {
     return () => {
       isMounted = false;
     };
-  }, [firestore, patientIds]);
+  }, [patientIds]);
 
   if (!patientIds.length) {
     notFound();
   }
 
-  const handlePrintAndMarkSent = async () => {
-    if (!firestore) {
+  const handleDownloadAllPDFs = async () => {
+    if (!statements.length) return;
+
+    setIsDownloading(true);
+    try {
+      for (const statementData of statements) {
+        const pdf = generateStatementPDF(statementData);
+
+        // Upload to storage
+        const filePath = await uploadStatementPDF(
+          pdf,
+          statementData.patient.id,
+          statementData.accountNumber,
+          supabase
+        );
+
+        if (filePath) {
+          // Track in generated_statements table
+          await supabase.from('generated_statements').insert({
+            patient_id: statementData.patient.id,
+            account_number: statementData.accountNumber,
+            statement_date: statementData.statementDate,
+            statement_type: 'first',
+            total_amount: statementData.totalAmountDue,
+            pdf_path: filePath,
+            claim_ids: statementData.claims.map(c => c.id),
+            pharmacy_of_service: statementData.claims[0]?.pharmacyOfService,
+            sent: false,
+          });
+        }
+
+        // Download each PDF
+        pdf.save(`statement_${statementData.accountNumber}_${Date.now()}.pdf`);
+
+        // Small delay between downloads to avoid browser blocking
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
       toast({
-        title: "Firestore unavailable",
-        description: "We couldn't connect to Firestore. Please try again.",
+        title: "PDFs Downloaded",
+        description: `Successfully downloaded ${statements.length} statement PDFs.`,
+      });
+    } catch (error) {
+      console.error("Error generating PDFs:", error);
+      toast({
+        title: "Download Failed",
+        description: "Failed to generate some PDF statements.",
         variant: "destructive",
       });
-      return;
+    } finally {
+      setIsDownloading(false);
     }
+  };
+
+  const handlePrintAndMarkSent = async () => {
 
     const claimIds = statements.flatMap((statement) =>
       statement.claims.map((claim) => claim.id)
@@ -249,7 +283,7 @@ function BulkStatementPageContent() {
 
     try {
       setIsUpdating(true);
-      await markClaimsStatementStatus(firestore, claimIds);
+      await markClaimsStatementStatus(claimIds);
 
       toast({
         title: "Statements status updated",
@@ -306,10 +340,20 @@ function BulkStatementPageContent() {
               Back to Dashboard
             </Link>
           </Button>
-          <Button onClick={handlePrintAndMarkSent} disabled={isUpdating}>
-            <Printer className="mr-2 h-4 w-4" />
-            {isUpdating ? "Updating..." : "Print All & Mark as Sent"}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={handleDownloadAllPDFs}
+              disabled={isDownloading}
+              variant="outline"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              {isDownloading ? "Generating..." : "Download All PDFs"}
+            </Button>
+            <Button onClick={handlePrintAndMarkSent} disabled={isUpdating}>
+              <Printer className="mr-2 h-4 w-4" />
+              {isUpdating ? "Updating..." : "Print All & Mark as Sent"}
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-8">

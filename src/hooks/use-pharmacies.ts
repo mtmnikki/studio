@@ -1,30 +1,40 @@
 "use client";
 
-import React from "react";
-import { collection } from "firebase/firestore";
-
+import * as React from "react";
 import type { Pharmacy } from "@/lib/types";
-import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
+import { useCollection } from "@/lib/supabase/hooks";
+import { createClient } from "@/lib/supabase/client";
 
-export const usePharmacies = () => {
-  const firestore = useFirestore();
+export function usePharmacies(initialPharmacies: Pharmacy[] = []) {
+    const supabase = createClient();
+    const { data, isLoading, error } = useCollection<Pharmacy>('pharmacies', 'name', true);
 
-  const pharmaciesCollection = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return collection(firestore, "pharmacies");
-  }, [firestore]);
+    const pharmacies = React.useMemo(() => {
+        const values = data ?? initialPharmacies ?? [];
+        return [...values].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+    }, [data, initialPharmacies]);
 
-  const { data: pharmaciesSnapshot, isLoading, error } =
-    useCollection<Pharmacy>(pharmaciesCollection);
+    const updatePharmacy = React.useCallback(
+        async (pharmacyId: string, updates: Partial<Pharmacy>) => {
+            try {
+                const { error } = await supabase
+                    .from('pharmacies')
+                    .update(updates)
+                    .eq('id', pharmacyId);
 
-  const pharmacies = React.useMemo(
-    () => pharmaciesSnapshot ?? [],
-    [pharmaciesSnapshot]
-  );
+                if (error) throw error;
+            } catch (error) {
+                console.error("Error updating pharmacy:", error);
+                throw error;
+            }
+        },
+        [supabase]
+    );
 
-  return {
-    pharmacies,
-    isLoading,
-    error,
-  };
-};
+    return {
+        pharmacies,
+        isLoading,
+        error,
+        updatePharmacy,
+    };
+}

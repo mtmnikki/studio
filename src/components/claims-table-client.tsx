@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import * as React from "react";
@@ -44,31 +42,30 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { formatCurrency } from "@/lib/utils";
 
 const noteOptions = [
-    "We will not receive payment",
-    "Paid- see payment on other influenza test",
-    "Patient Meeting Deductible/Co-insurance",
-    "The impact of prior payer(s) adjudication including payments and/or adjustments. (Use only with Group Code OA)",
-    "Payment Received",
-    "Reversed Claim",
+  "We will not receive payment",
+  "Paid- see payment on other influenza test",
+  "Patient Meeting Deductible/Co-insurance",
+  "The impact of prior payer(s) adjudication including payments and/or adjustments. (Use only with Group Code OA)",
+  "Payment Received",
+  "Reversed Claim",
 ];
 
-const workflowOptions = [
-  "New", "Pending", "Complete", "Sent to Collections"
-] as const;
+const workflowOptions: Claim["workflow"][] = ["New", "Pending", "Complete", "Sent to Collections"];
+const billingStatusOptions: Claim["billingStatus"][] = ["Pending", "Billed", "Paid", "Collections"];
+const paymentStatusOptions: Claim["paymentStatus"][] = ["PAID", "DENIED", "PENDING"];
 
-const formatDate = (dateString: string) => {
-    if (!dateString) return '';
-    // Dates from firestore might be in a different format, ensure consistency
-    const date = new Date(dateString);
-    // Add timezone offset to prevent the date from changing
-    const userTimezoneOffset = date.getTimezoneOffset() * 60000;
-    return new Date(date.getTime() + userTimezoneOffset).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    });
-}
-
+const formatDate = (dateString?: string | null) => {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) {
+    return dateString;
+  }
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+};
 
 export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Claim[] }) {
   const { claims, removeClaims, updateClaim } = useClaims(initialClaims);
@@ -87,9 +84,9 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
 
     let working = claims;
     if (filter === "needed") {
-      working = working.filter((c) => !c.statementSent && (c.patientPay ?? 0) > 0);
+      working = working.filter((claim) => !claim.statementMailed && claim.patientResponsibility > 0);
     } else if (filter === "sent") {
-      working = working.filter((c) => c.statementSent);
+      working = working.filter((claim) => claim.statementMailed);
     }
 
     if (!normalizedSearch) {
@@ -99,12 +96,11 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
     return working.filter((claim) => {
       const haystack = [
         claim.patientName,
-        claim.payee,
-        claim.payer,
-        claim.serviceDescription,
-        claim.productId,
-        claim.checkNumber,
-        claim.rx,
+        claim.accountNumber,
+        claim.pharmacyOfService,
+        claim.rxNumber,
+        claim.cptHcpcsCode,
+        claim.notes,
       ]
         .filter(Boolean)
         .join(" ")
@@ -120,7 +116,7 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedClaimIds(filteredClaims.map(c => c.id));
+      setSelectedClaimIds(filteredClaims.map((claim) => claim.id));
     } else {
       setSelectedClaimIds([]);
     }
@@ -128,35 +124,38 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
 
   const handleSelectRow = (claimId: string, checked: boolean) => {
     if (checked) {
-      setSelectedClaimIds(prev => [...prev, claimId]);
+      setSelectedClaimIds((prev) => [...prev, claimId]);
     } else {
-      setSelectedClaimIds(prev => prev.filter(id => id !== claimId));
+      setSelectedClaimIds((prev) => prev.filter((id) => id !== claimId));
     }
   };
-  
+
   const handleFieldChange = (claimId: string, field: keyof Claim, value: any) => {
-    const claim = claims.find(c => c.id === claimId);
-    if (claim) {
-      if (field === "statementSent") {
-        updateClaim({
-          ...claim,
-          statementSent: Boolean(value),
-          statementSentAt: value ? new Date().toISOString() : null,
-        });
-        return;
-      }
+    const claim = claims?.find((item) => item.id === claimId);
+    if (!claim) return;
 
-      if (field === "statementSent2nd") {
-        updateClaim({
-          ...claim,
-          statementSent2nd: Boolean(value),
-          statementSent2ndAt: value ? new Date().toISOString() : null,
-        });
-        return;
-      }
-
-      updateClaim({ ...claim, [field]: value });
+    if (field === "statementMailed") {
+      updateClaim({
+        ...claim,
+        statementMailed: Boolean(value),
+        statementSentAt: value ? new Date().toISOString() : null,
+      });
+      return;
     }
+
+    if (field === "statementTwoMailed") {
+      updateClaim({
+        ...claim,
+        statementTwoMailed: Boolean(value),
+        statementSent2ndAt: value ? new Date().toISOString() : null,
+      });
+      return;
+    }
+
+    updateClaim({
+      ...claim,
+      [field]: value,
+    });
   };
 
   const numSelected = selectedClaimIds.length;
@@ -173,31 +172,29 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
   };
 
   const handleGenerateStatements = () => {
-    const selectedClaims = claims.filter(c => selectedClaimIds.includes(c.id));
-    // Ensure we only get unique patient IDs
-    const patientIds = [
-      ...new Set(
-        selectedClaims
-          .map((c) => c.patientId)
-          .filter((id): id is string => Boolean(id))
-      ),
-    ];
+    if (!claims) return;
 
-    if (!patientIds.length) {
+    const selectedClaims = claims.filter((claim) => selectedClaimIds.includes(claim.id));
+    const patientIds = selectedClaims
+      .map((claim) => claim.patientId)
+      .filter((value): value is string => Boolean(value));
+
+    const uniquePatientIds = Array.from(new Set(patientIds));
+
+    if (!uniquePatientIds.length) {
       toast({
-        title: "Missing patient information",
-        description:
-          "Select claims with a linked patient before generating statements.",
+        title: "No patients selected",
+        description: "Select claims that have an associated patient to generate statements.",
         variant: "destructive",
       });
       return;
     }
 
-    const query = new URLSearchParams(patientIds.map(id => ['p', id])).toString();
+    const query = new URLSearchParams(uniquePatientIds.map((id) => ["p", id])).toString();
     router.push(`/statement/bulk?${query}`);
   };
-  
-  const getWorkflowBadgeVariant = (workflow: typeof workflowOptions[number]) => {
+
+  const getWorkflowBadgeVariant = (workflow: Claim["workflow"]) => {
     switch (workflow) {
       case "New":
         return "default";
@@ -212,110 +209,152 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
     }
   };
 
-
   const renderCell = (claim: Claim, field: keyof Claim) => {
-    const cellValue = claim[field];
-    
-    if (field === 'paymentStatus') {
+    const value = claim[field];
+
+    if (field === "paymentStatus") {
       return (
-        <Select value={claim.paymentStatus} onValueChange={(value) => handleFieldChange(claim.id, 'paymentStatus', value)}>
+        <Select value={claim.paymentStatus} onValueChange={(next) => handleFieldChange(claim.id, field, next)}>
           <SelectTrigger className="h-8 w-[110px] bg-transparent border-0 shadow-none focus:ring-0">
-            <Badge variant={claim.paymentStatus === 'PAID' ? "secondary" : claim.paymentStatus === 'PENDING' ? 'outline' : "destructive"}>{claim.paymentStatus}</Badge>
+            <Badge
+              variant={
+                claim.paymentStatus === "PAID"
+                  ? "secondary"
+                  : claim.paymentStatus === "PENDING"
+                  ? "outline"
+                  : "destructive"
+              }
+            >
+              {claim.paymentStatus}
+            </Badge>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="PAID">PAID</SelectItem>
-            <SelectItem value="DENIED">DENIED</SelectItem>
-            <SelectItem value="PENDING">PENDING</SelectItem>
+            {paymentStatusOptions.map((option) => (
+              <SelectItem key={option} value={option}>
+                {option}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
-      )
+      );
     }
-    if (field === 'postingStatus') {
+
+    if (field === "billingStatus") {
       return (
-        <Select value={claim.postingStatus} onValueChange={(value) => handleFieldChange(claim.id, 'postingStatus', value)}>
+        <Select value={claim.billingStatus} onValueChange={(next) => handleFieldChange(claim.id, field, next)}>
           <SelectTrigger className="h-8 w-[120px] bg-transparent border-0 shadow-none focus:ring-0">
-             <SelectValue placeholder="Select Status" />
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="Posted">Posted</SelectItem>
-            <SelectItem value="Unposted">Unposted</SelectItem>
+            {billingStatusOptions.map((option) => (
+              <SelectItem key={option} value={option}>
+                {option}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
-      )
+      );
     }
-     if (field === 'notes') {
+
+    if (field === "workflow") {
+      return (
+        <Select value={claim.workflow} onValueChange={(next) => handleFieldChange(claim.id, field, next)}>
+          <SelectTrigger className="h-8 w-[150px] bg-transparent border-0 shadow-none focus:ring-0">
+            <Badge variant={getWorkflowBadgeVariant(claim.workflow)}>{claim.workflow}</Badge>
+          </SelectTrigger>
+          <SelectContent>
+            {workflowOptions.map((option) => (
+              <SelectItem key={option} value={option}>
+                {option}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      );
+    }
+
+    if (field === "notes") {
       return (
         <Select
-          value={claim.notes}
-          onValueChange={(value) => handleFieldChange(claim.id, 'notes', value === '__none__' ? '' : value)}
+          value={claim.notes ?? ""}
+          onValueChange={(next) => handleFieldChange(claim.id, field, next === "__none__" ? "" : next)}
         >
-          <SelectTrigger className="h-8 w-[200px] bg-transparent border-0 shadow-none focus:ring-0">
-             <div className="truncate">{claim.notes || <span className="text-muted-foreground">Add a note...</span>}</div>
+          <SelectTrigger className="h-8 w-[220px] bg-transparent border-0 shadow-none focus:ring-0">
+            <div className="truncate">
+              {claim.notes || <span className="text-muted-foreground">Add a note...</span>}
+            </div>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="__none__">None</SelectItem>
-            {noteOptions.map(option => (
-              <SelectItem key={option} value={option}>{option}</SelectItem>
+            {noteOptions.map((option) => (
+              <SelectItem key={option} value={option}>
+                {option}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
-      )
-    }
-    if (field === 'statementSent') {
-        return (
-           <Checkbox
-              className="mx-auto block"
-              checked={!!cellValue}
-              onCheckedChange={(checked) => handleFieldChange(claim.id, 'statementSent', !!checked)}
-            />
-        )
-    }
-    if (field === 'statementSent2nd') {
-        return (
-           <Checkbox
-              className="mx-auto block"
-              checked={!!cellValue}
-              onCheckedChange={(checked) => handleFieldChange(claim.id, 'statementSent2nd', !!checked)}
-            />
-        )
-    }
-    if (field === 'workflow') {
-      return (
-        <Select value={claim.workflow} onValueChange={(value) => handleFieldChange(claim.id, 'workflow', value)}>
-          <SelectTrigger className="h-8 w-[150px] bg-transparent border-0 shadow-none focus:ring-0">
-            <Badge variant={getWorkflowBadgeVariant(claim.workflow as any)}>{claim.workflow}</Badge>
-          </SelectTrigger>
-          <SelectContent>
-            {workflowOptions.map(option => (
-              <SelectItem key={option} value={option}>{option}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )
-    }
-    if (typeof cellValue === 'number' && ['amount', 'paid', 'adjustment', 'patientPay'].includes(field)) {
-      return formatCurrency(cellValue);
-    }
-    if ((field.toLowerCase().includes('date') || field === 'serviceDate') && cellValue) {
-        return formatDate(cellValue as string);
+      );
     }
 
-    return cellValue as React.ReactNode;
+    if (field === "statementMailed" || field === "statementTwoMailed") {
+      return (
+        <Checkbox
+          className="mx-auto block"
+          checked={Boolean(value)}
+          onCheckedChange={(checked) => handleFieldChange(claim.id, field, checked)}
+        />
+      );
+    }
+
+    return value as React.ReactNode;
   };
 
-
   return (
-    <Tabs defaultValue="all" onValueChange={(value) => setFilter(value as any)}>
-      <div className="flex items-center gap-4">
-        <TabsList>
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="needed">Statement Needed</TabsTrigger>
-          <TabsTrigger value="sent">Statement Sent</TabsTrigger>
-        </TabsList>
+    <Tabs
+      defaultValue="all"
+      onValueChange={(next) => setFilter(next as typeof filter)}
+      className="rounded-3xl border border-white/40 bg-white/40 p-4 shadow-xl shadow-sky-200/40 backdrop-blur-xl"
+    >
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <TabsList className="bg-gradient-to-r from-indigo-400/80 via-sky-500/80 to-teal-300/80 p-[2px]">
+            <TabsTrigger
+              value="all"
+              className="rounded-2xl bg-white/80 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-white data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-400/70 data-[state=active]:to-sky-400/70 data-[state=active]:text-slate-50"
+            >
+              All
+            </TabsTrigger>
+            <TabsTrigger
+              value="needed"
+              className="rounded-2xl bg-white/50 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-white data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-400/80 data-[state=active]:to-cyan-400/80 data-[state=active]:text-slate-50"
+            >
+              Statement Needed
+            </TabsTrigger>
+            <TabsTrigger
+              value="sent"
+              className="rounded-2xl bg-white/50 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-white data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-400/80 data-[state=active]:to-emerald-300/80 data-[state=active]:text-slate-50"
+            >
+              Statement Sent
+            </TabsTrigger>
+          </TabsList>
+          <Input
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search patient, account, pharmacy, RX..."
+            className="h-11 w-full min-w-[220px] max-w-xs rounded-2xl border-none bg-white/70 px-4 text-sm text-slate-600 shadow-inner shadow-sky-200/50 backdrop-blur"
+          />
+        </div>
         {numSelected > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">{numSelected} selected</span>
-            <Button variant="outline" size="sm" onClick={handleGenerateStatements}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-slate-600">
+              {numSelected} selected
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleGenerateStatements}
+              className="rounded-full border-none bg-gradient-to-r from-sky-500 to-teal-400 px-4 text-white shadow-lg shadow-sky-300/50 transition hover:shadow-xl"
+            >
               <FileText className="mr-2 h-4 w-4" />
               Generate Statements
             </Button>
@@ -331,90 +370,82 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
           </div>
         )}
       </div>
-      <TabsContent value={filter}>
-        <Card>
-          <CardHeader>
-            <CardTitle>Claims</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="relative overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>
-                      <Checkbox
-                        checked={isAllSelected}
-                        onCheckedChange={(checked) => handleSelectAll(Boolean(checked))}
-                        aria-label="Select all"
-                      />
-                    </TableHead>
-                    <TableHead className="whitespace-nowrap">Check Date</TableHead>
-                    <TableHead className="whitespace-nowrap">Check #</TableHead>
-                    <TableHead className="whitespace-nowrap">NPI</TableHead>
-                    <TableHead className="whitespace-nowrap">Payee</TableHead>
-                    <TableHead className="whitespace-nowrap">Payer</TableHead>
-                    <TableHead className="whitespace-nowrap">Rx #</TableHead>
-                    <TableHead className="whitespace-nowrap">DOS</TableHead>
-                    <TableHead className="whitespace-nowrap">Cardholder ID</TableHead>
-                    <TableHead className="whitespace-nowrap">Patient</TableHead>
-                    <TableHead className="whitespace-nowrap">Service</TableHead>
-                    <TableHead className="whitespace-nowrap">CPT/HCPCS</TableHead>
-                    <TableHead className="whitespace-nowrap text-right">Billed</TableHead>
-                    <TableHead className="whitespace-nowrap text-right">Paid</TableHead>
-                    <TableHead className="whitespace-nowrap text-right">Adjustment</TableHead>
-                    <TableHead className="whitespace-nowrap text-right">Patient Pay</TableHead>
-                    <TableHead className="whitespace-nowrap">Payment Status</TableHead>
-                    <TableHead className="whitespace-nowrap">Posting Status</TableHead>
-                    <TableHead className="whitespace-nowrap">Workflow</TableHead>
-                    <TableHead className="whitespace-nowrap">Notes</TableHead>
-                    <TableHead className="whitespace-nowrap text-center">1st Stmt Sent?</TableHead>
-                    <TableHead className="whitespace-nowrap text-center">1st Sent Date</TableHead>
-                    <TableHead className="whitespace-nowrap text-center">2nd Stmt Sent?</TableHead>
-                    <TableHead className="whitespace-nowrap text-center">2nd Sent Date</TableHead>
-                    <TableHead>
-                      <span className="sr-only">Actions</span>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredClaims.length > 0 ? (
-                    filteredClaims.map((claim) => (
-                      <TableRow key={claim.id} data-state={selectedClaimIds.includes(claim.id) ? "selected" : ""}>
-                         <TableCell>
-                          <Checkbox
-                            checked={selectedClaimIds.includes(claim.id)}
-                            onCheckedChange={(checked) => handleSelectRow(claim.id, Boolean(checked))}
-                            aria-label={`Select claim ${claim.id}`}
-                          />
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">{formatDate(claim.checkDate)}</TableCell>
-                        <TableCell className="whitespace-nowrap">{claim.checkNumber}</TableCell>
-                        <TableCell className="whitespace-nowrap">{claim.npi}</TableCell>
-                        <TableCell className="whitespace-nowrap">{claim.payee}</TableCell>
-                        <TableCell className="whitespace-nowrap">{claim.payer}</TableCell>
-                        <TableCell className="whitespace-nowrap">{claim.rx}</TableCell>
-                        <TableCell className="whitespace-nowrap">{formatDate(claim.serviceDate)}</TableCell>
-                        <TableCell className="whitespace-nowrap">{claim.cardholderId}</TableCell>
-                        <TableCell className="font-medium whitespace-nowrap">{claim.patientName}</TableCell>
-                        <TableCell className="whitespace-nowrap">{claim.serviceDescription}</TableCell>
-                        <TableCell className="whitespace-nowrap">{claim.productId}</TableCell>
-                        <TableCell className="whitespace-nowrap text-right">{formatCurrency(claim.amount)}</TableCell>
-                        <TableCell className="whitespace-nowrap text-right">{formatCurrency(claim.paid)}</TableCell>
-                        <TableCell className="whitespace-nowrap text-right">{formatCurrency(claim.adjustment)}</TableCell>
-                        <TableCell className="whitespace-nowrap text-right">{formatCurrency(claim.patientPay)}</TableCell>
-                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'paymentStatus')}</TableCell>
-                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'postingStatus')}</TableCell>
-                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'workflow')}</TableCell>
-                        <TableCell className="whitespace-nowrap">{renderCell(claim, 'notes')}</TableCell>
-                        <TableCell className="whitespace-nowrap text-center">{renderCell(claim, 'statementSent')}</TableCell>
-                        <TableCell className="whitespace-nowrap text-center">
-                          {claim.statementSentAt ? formatDate(claim.statementSentAt) : "—"}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-center">{renderCell(claim, 'statementSent2nd')}</TableCell>
-                        <TableCell className="whitespace-nowrap text-center">
-                          {claim.statementSent2ndAt ? formatDate(claim.statementSent2ndAt) : "—"}
-                        </TableCell>
-                        <TableCell>
+      <TabsContent value={filter} className="mt-6">
+        <Card className="border-none bg-white/70 p-[1px] shadow-2xl shadow-sky-200/50">
+          <div className="rounded-3xl bg-gradient-to-br from-white/90 via-white/70 to-white/60">
+            <CardHeader className="flex flex-col items-start gap-2 border-b border-white/60 px-6 py-6">
+              <CardTitle className="text-xl font-semibold text-slate-700">
+                Claims
+              </CardTitle>
+              <p className="text-sm text-slate-500">
+                Monitor and manage statements in real time.
+              </p>
+            </CardHeader>
+            <CardContent className="px-0 py-0">
+              <div className="relative overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-white/70">
+                      <TableHead className="w-[50px]">
+                        <Checkbox checked={isAllSelected} onCheckedChange={(checked) => handleSelectAll(Boolean(checked))} />
+                      </TableHead>
+                      <TableHead>Patient</TableHead>
+                      <TableHead>Account</TableHead>
+                      <TableHead>Service Date</TableHead>
+                      <TableHead>Pharmacy</TableHead>
+                      <TableHead>RX</TableHead>
+                      <TableHead>CPT/HCPCS</TableHead>
+                      <TableHead className="text-right">Charged</TableHead>
+                      <TableHead className="text-right">Insurance Paid</TableHead>
+                      <TableHead className="text-right">Adjustment</TableHead>
+                      <TableHead className="text-right">Patient Pay</TableHead>
+                      <TableHead className="text-right">Balance</TableHead>
+                      <TableHead>Payment Status</TableHead>
+                      <TableHead>Billing Status</TableHead>
+                      <TableHead>Workflow</TableHead>
+                      <TableHead>Notes</TableHead>
+                      <TableHead className="text-center">Statement Sent</TableHead>
+                      <TableHead className="text-center">Sent At</TableHead>
+                      <TableHead className="text-center">Second Notice</TableHead>
+                      <TableHead className="text-center">Second Sent</TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredClaims.length > 0 ? (
+                      filteredClaims.map((claim) => (
+                        <TableRow
+                          key={claim.id}
+                          data-state={selectedClaimIds.includes(claim.id) ? "selected" : ""}
+                          className="bg-transparent transition hover:bg-sky-50/60"
+                        >
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedClaimIds.includes(claim.id)}
+                              onCheckedChange={(checked) => handleSelectRow(claim.id, Boolean(checked))}
+                              aria-label={`Select claim ${claim.id}`}
+                            />
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap font-medium">{claim.patientName}</TableCell>
+                          <TableCell className="whitespace-nowrap">{claim.accountNumber}</TableCell>
+                          <TableCell className="whitespace-nowrap">{formatDate(claim.serviceDate)}</TableCell>
+                          <TableCell className="whitespace-nowrap">{claim.pharmacyOfService ?? "-"}</TableCell>
+                          <TableCell className="whitespace-nowrap">{claim.rxNumber ?? "-"}</TableCell>
+                          <TableCell className="whitespace-nowrap">{claim.cptHcpcsCode ?? "-"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-right">{formatCurrency(claim.totalChargedAmount)}</TableCell>
+                          <TableCell className="whitespace-nowrap text-right">{formatCurrency(claim.insurancePaid)}</TableCell>
+                          <TableCell className="whitespace-nowrap text-right">{formatCurrency(claim.insuranceAdjustment)}</TableCell>
+                          <TableCell className="whitespace-nowrap text-right">{formatCurrency(claim.patientResponsibility)}</TableCell>
+                          <TableCell className="whitespace-nowrap text-right">{formatCurrency(claim.accountBalance)}</TableCell>
+                          <TableCell className="whitespace-nowrap">{renderCell(claim, "paymentStatus")}</TableCell>
+                          <TableCell className="whitespace-nowrap">{renderCell(claim, "billingStatus")}</TableCell>
+                          <TableCell className="whitespace-nowrap">{renderCell(claim, "workflow")}</TableCell>
+                          <TableCell className="whitespace-nowrap">{renderCell(claim, "notes")}</TableCell>
+                          <TableCell className="whitespace-nowrap text-center">{renderCell(claim, "statementMailed")}</TableCell>
+                          <TableCell className="whitespace-nowrap text-center">{claim.statementSentAt ? formatDate(claim.statementSentAt) : "-"}</TableCell>
+                          <TableCell className="whitespace-nowrap text-center">{renderCell(claim, "statementTwoMailed")}</TableCell>
+                          <TableCell className="whitespace-nowrap text-center">{claim.statementSent2ndAt ? formatDate(claim.statementSent2ndAt) : "-"}</TableCell>
+                          <TableCell>
                             <div className="flex items-center">
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -423,30 +454,32 @@ export function ClaimsTableClient({ initialClaims = [] }: { initialClaims?: Clai
                                     <span className="sr-only">Toggle menu</span>
                                   </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                  <DropdownMenuItem asChild>
-                                    <Link href={`/statement/${claim.id}`}>
-                                      <FileText className="mr-2 h-4 w-4" />
+                                <DropdownMenuContent align="end" className="rounded-2xl border border-slate-100 bg-white/90 shadow-lg">
+                                  <DropdownMenuLabel className="text-xs uppercase tracking-wide text-slate-500">
+                                    Actions
+                                  </DropdownMenuLabel>
+                                  <DropdownMenuItem asChild className="rounded-xl text-slate-600 focus:bg-sky-100/70">
+                                    <Link href={`/statement/${claim.id}`} className="flex items-center">
+                                      <FileText className="mr-2 h-4 w-4 text-sky-500" />
                                       Generate Statement
                                     </Link>
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={21} className="h-24 text-center">
+                          No claims found for this filter.
                         </TableCell>
                       </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={23} className="h-24 text-center text-slate-500">
-                        No claims found for this filter.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </div>
         </Card>

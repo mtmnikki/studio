@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Printer } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { initializeFirebase } from "@/firebase";
 import { markClaimsStatementStatus } from "@/lib/statement-actions";
 
 type PrintStatementButtonProps = {
@@ -46,20 +45,9 @@ export function PrintStatementButton({
       return;
     }
 
-    const { firestore } = initializeFirebase();
-
-    if (!firestore) {
-      toast({
-        title: "Firestore unavailable",
-        description: "We couldn't connect to Firestore. Please try again.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     try {
       setIsSubmitting(true);
-      await markClaimsStatementStatus(firestore, claimIds, { statement });
+      await markClaimsStatementStatus(claimIds, { statement });
 
       toast({
         title: "Statement status updated",

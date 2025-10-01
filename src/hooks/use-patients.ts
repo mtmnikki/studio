@@ -1,48 +1,13 @@
 "use client";
 
-import React from "react";
-import { collection } from "firebase/firestore";
-
-import type { Patient } from "@/lib/types";
-import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
-
-export const usePatients = () => {
-  const firestore = useFirestore();
-
-  const patientsCollection = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return collection(firestore, "patients");
-  }, [firestore]);
-
-  const { data: patientsSnapshot, isLoading, error } =
-    useCollection<Patient>(patientsCollection);
-
-  const patients = React.useMemo(() => patientsSnapshot ?? [], [patientsSnapshot]);
-
-  return {
-    patients,
-    isLoading,
-    error,
-  };
-};
-
-"use client";
-
 import * as React from "react";
 import type { Patient } from "@/lib/types";
-import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
-import { collection, doc } from "firebase/firestore";
-import { updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
+import { useCollection } from "@/lib/supabase/hooks";
+import { createClient } from "@/lib/supabase/client";
 
 export function usePatients(initialPatients: Patient[] = []) {
-  const firestore = useFirestore();
-
-  const patientsCollection = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return collection(firestore, "patients");
-  }, [firestore]);
-
-  const { data, isLoading, error } = useCollection<Patient>(patientsCollection);
+  const supabase = createClient();
+  const { data, isLoading, error } = useCollection<Patient>("patients", "last_name", true);
 
   const patients = React.useMemo(() => {
     const values = data ?? initialPatients ?? [];
@@ -54,12 +19,18 @@ export function usePatients(initialPatients: Patient[] = []) {
   }, [data, initialPatients]);
 
   const updatePatient = React.useCallback(
-    (patientId: string, updates: Partial<Patient>) => {
-      if (!firestore) return;
-      const ref = doc(firestore, "patients", patientId);
-      updateDocumentNonBlocking(ref, updates);
+    async (patientId: string, updates: Partial<Patient>) => {
+      const { error: updateError } = await supabase
+        .from("patients")
+        .update(updates)
+        .eq("id", patientId);
+
+      if (updateError) {
+        console.error("Error updating patient:", updateError);
+        throw updateError;
+      }
     },
-    [firestore]
+    [supabase]
   );
 
   return {

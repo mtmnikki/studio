@@ -1,61 +1,73 @@
 "use client";
 
 import React from "react";
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  updateDoc,
-} from "firebase/firestore";
-
 import type { Note } from "@/lib/types";
-import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
+import { useCollection } from "@/lib/supabase/hooks";
+import { createClient } from "@/lib/supabase/client";
 
 export const useNotes = () => {
-  const firestore = useFirestore();
-
-  const notesCollection = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return collection(firestore, "notes");
-  }, [firestore]);
-
-  const { data: notesSnapshot, isLoading, error } = useCollection<Note>(
-    notesCollection
-  );
+  const supabase = createClient();
+  const { data: notesSnapshot, isLoading, error } = useCollection<Note>('notes', 'created_at', false);
 
   const notes = React.useMemo(() => notesSnapshot ?? [], [notesSnapshot]);
 
   const addNote = React.useCallback(
-    async (note: Pick<Note, "title" | "content" | "tags" | "pinned">) => {
-      if (!notesCollection) return;
+    async (note: Partial<Note> & { title: string }) => {
       const timestamp = new Date().toISOString();
-      await addDoc(notesCollection, {
-        ...note,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      });
+
+      try {
+        const { error } = await supabase
+          .from('notes')
+          .insert([{
+            ...note,
+            created_at: timestamp,
+            updated_at: timestamp,
+          }]);
+
+        if (error) throw error;
+      } catch (error) {
+        console.error("Error adding note:", error);
+        throw error;
+      }
     },
-    [notesCollection]
+    [supabase]
   );
 
   const updateNote = React.useCallback(
     async (noteId: string, updates: Partial<Note>) => {
-      const noteRef = doc(firestore, "notes", noteId);
-      await updateDoc(noteRef, {
-        ...updates,
-        updatedAt: new Date().toISOString(),
-      });
+      try {
+        const { error } = await supabase
+          .from('notes')
+          .update({
+            ...updates,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', noteId);
+
+        if (error) throw error;
+      } catch (error) {
+        console.error("Error updating note:", error);
+        throw error;
+      }
     },
-    [firestore]
+    [supabase]
   );
 
   const deleteNote = React.useCallback(
     async (noteId: string) => {
-      const noteRef = doc(firestore, "notes", noteId);
-      await deleteDoc(noteRef);
+      try {
+        const { error } = await supabase
+          .from('notes')
+          .delete()
+          .eq('id', noteId);
+
+        if (error) throw error;
+      } catch (error) {
+        console.error("Error deleting note:", error);
+        throw error;
+      }
     },
-    [firestore]
+    [supabase]
   );
 
   return {
