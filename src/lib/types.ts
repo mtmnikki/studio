@@ -1,78 +1,64 @@
-export interface PatientAddress {
-  street?: string;
-  city?: string;
-  state?: string;
-  zip?: string;
-}
-
 export interface Patient {
   id: string;
+  accountNumber: string;
+  patientName: string;
   firstName?: string;
   lastName?: string;
   dateOfBirth?: string; // YYYY-MM-DD
   email?: string;
   phone?: string;
-  status?: string;
+  addressStreet?: string;
+  addressCity?: string;
+  addressState?: string;
+  addressZip?: string;
+  status?: "Active" | "Inactive" | "Collections";
   createdAt?: string;
   updatedAt?: string;
-  address?: PatientAddress;
-}
-
-export interface Pharmacy {
-  id: string;
-  name: string;
-  contactName?: string;
-  phone?: string;
-  email?: string;
-  status?: string;
-  tags?: string[];
-  notes?: string;
-  address?: {
-    street?: string;
-    city?: string;
-    state?: string;
-    zip?: string;
-  };
-  lastUpdated?: string;
-  createdAt?: string;
-}
-
-export interface Note {
-  id: string;
-  title: string;
-  content: string;
-  createdAt: string;
-  updatedAt: string;
-  pinned?: boolean;
-  tags?: string[];
 }
 
 export interface Claim {
   id: string;
-  checkDate: string; // YYYY-MM-DD
-  checkNumber: string;
-  npi: string;
-  payee: string;
-  payer: string;
-  rx: string;
-  serviceDate: string; // YYYY-MM-DD, also known as DOS
-  cardholderId: string;
-  patientName: string; // Denormalized for easy display
-  patientId: string;
-  serviceDescription: string; // also known as Product/Service
-  productId: string; // CPT/HCPCS Code
-  amount: number; // also known as Billed
-  paid: number;
-  adjustment: number;
-  patientPay: number;
+
+  // Patient & Account Info
+  patientId?: string;
+  accountNumber?: string;
+  patientName: string;
+
+  // Service Details
+  serviceDate: string; // YYYY-MM-DD (DOS)
+  cptHcpcsCode?: string;
+  pharmacyOfService?: string;
+  rxNumber?: string;
+
+  // Financial Details
+  totalChargedAmount: number;
+  insuranceAdjustment: number;
+  insurancePaid: number;
+  patientResponsibility: number;
+  patientPaidAmount: number;
+  accountBalance: number;
+
+  // Status & Workflow
+  billingStatus: 'Pending' | 'Billed' | 'Paid' | 'Collections';
   paymentStatus: 'PAID' | 'DENIED' | 'PENDING';
-  postingStatus: 'Posted' | 'Unposted';
   workflow: 'New' | 'Pending' | 'Complete' | 'Sent to Collections';
-  notes: string;
-  statementSent: boolean; // 1st Statement Sent?
-  statementSent2nd: boolean; // 2nd Statement Sent?
+
+  // Statements
+  statementCreatedDate?: string | null;
+  statementMailed: boolean;
+  statementTwoMailed: boolean;
+  statementThreeMailed: boolean;
   statementSentAt?: string | null;
   statementSent2ndAt?: string | null;
+  statementSent3rdAt?: string | null;
+  statementPaid: boolean;
+
+  // Additional Info
+  notes?: string;
+
+  // Metadata
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Pharmacy {
@@ -94,6 +80,18 @@ export interface Pharmacy {
   lastSyncAt?: string | null;
 }
 
+export interface Note {
+  id: string;
+  title: string;
+  content?: string;
+  body?: string;
+  createdAt: string;
+  updatedAt: string;
+  tags?: string[];
+  pinned?: boolean;
+  mood?: "celebrate" | "todo" | "follow-up" | "idea";
+}
+
 export interface JennNote {
   id: string;
   title: string;
@@ -102,4 +100,39 @@ export interface JennNote {
   updatedAt: string;
   tags?: string[];
   mood?: "celebrate" | "todo" | "follow-up" | "idea";
+}
+
+export interface CSVUpload {
+  id: string;
+  fileName: string;
+  filePath: string;
+  uploadedBy?: string;
+  uploadDate: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  recordsImported: number;
+  errors?: string;
+  createdAt: string;
+}
+
+export interface GeneratedStatement {
+  id: string;
+  patientId: string;
+  accountNumber: string;
+  statementDate: string;
+  statementType: 'first' | 'second' | 'third';
+  totalAmount: number;
+  pdfPath?: string;
+  sent: boolean;
+  sentAt?: string | null;
+  claimIds: string[];
+  createdAt: string;
+}
+
+export interface StatementData {
+  patient: Patient;
+  claims: Claim[];
+  accountNumber: string;
+  totalAmountDue: number;
+  statementDate: string;
+  dueDate: string;
 }

@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "Claim": {
@@ -58,10 +59,47 @@
         }
       },
       "required": ["firstName", "lastName", "dateOfBirth", "address"]
+    },
+    "JennNote": {
+      "title": "JennNote",
+      "type": "object",
+      "description": "Represents a note created by Jenn.",
+      "properties": {
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "mood": { "type": "string", "enum": ["celebrate", "todo", "follow-up", "idea"] }
+      },
+      "required": ["title", "body", "createdAt", "updatedAt"]
+    },
+    "Pharmacy": {
+      "title": "Pharmacy",
+      "description": "Represents a pharmacy.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "npi": { "type": "string" },
+        "contactName": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "status": { "type": "string", "enum": ["Active", "Paused", "Prospect"] },
+        "address": {
+          "type": "object",
+          "properties": {
+            "street": { "type": "string" },
+            "city": { "type": "string" },
+            "state": { "type": "string" },
+            "zip": { "type": "string" }
+          }
+        }
+      },
+      "required": ["name"]
     }
   },
   "auth": {
-    "providers": ["password", "anonymous"]
+    "providers": ["password"]
   },
   "firestore": {
     "/patients/{patientId}": {
@@ -71,6 +109,14 @@
     "/claims/{claimId}": {
       "schema": { "$ref": "#/entities/Claim" },
       "description": "Stores all claims. Claims contain a patientId for linking."
+    },
+    "/notes/{noteId}": {
+      "schema": { "$ref": "#/entities/JennNote" },
+      "description": "Stores notes created by Jenn."
+    },
+    "/pharmacies/{pharmacyId}": {
+      "schema": { "$ref": "#/entities/Pharmacy" },
+      "description": "Stores pharmacy partner data."
     }
   }
 }

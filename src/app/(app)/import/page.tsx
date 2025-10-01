@@ -2,189 +2,272 @@
 
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
-import Papa from "papaparse";
 import { useClaims } from "@/hooks/use-claims";
 import { useRouter } from "next/navigation";
-import type { Claim } from "@/lib/types";
-import { parseBooleanFlag, parseCurrency } from "@/lib/utils";
+import { parseCSVWithAI, transformToClaimData } from "@/lib/ai-csv-parser";
+import { Badge } from "@/components/ui/badge";
+import { CheckCircle2, AlertCircle, Sparkles } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 export default function ImportPage() {
   const { toast } = useToast();
   const router = useRouter();
   const { addClaims } = useClaims();
+  const supabase = createClient();
+
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [parsedData, setParsedData] = useState<any>(null);
+  const [step, setStep] = useState<'select' | 'preview' | 'importing'>('select');
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
       setSelectedFile(event.target.files[0]);
+      setParsedData(null);
+      setStep('select');
     }
   };
 
-  const parseCurrency = (value: unknown) => {
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value;
-    }
-
-    if (!value) {
-      return 0;
-    }
-
-    const cleaned = String(value)
-      .replace(/[$,]/g, "")
-      .replace(/\((.*)\)/, "-$1")
-      .replace(/[^0-9.-]/g, "");
-
-    const parsed = parseFloat(cleaned);
-
-    return Number.isFinite(parsed) ? parsed : 0;
-  };
-
-  const handleProcessData = () => {
+  const handleAnalyzeWithAI = async () => {
     if (!selectedFile) {
       toast({
         title: "No File Selected",
-        description: "Please select a CSV file to process.",
+        description: "Please select a CSV file to analyze.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check for OpenAI API key
+    const openaiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
+    if (!openaiKey) {
+      toast({
+        title: "API Key Missing",
+        description: "OpenAI API key is not configured. Please add NEXT_PUBLIC_OPENAI_API_KEY to your .env.local file.",
         variant: "destructive",
       });
       return;
     }
 
     setIsLoading(true);
+    setStep('preview');
 
-    Papa.parse(selectedFile, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (header) => header.trim(),
-      // @ts-ignore
-      complete: async (results: { data: any[] }) => {
-        try {
-          const newClaims: Omit<Claim, "id">[] = results.data.map((row: any, index: number) => {
-            
-            const parseDate = (dateString: string) => {
-              if (!dateString) return new Date().toISOString().split('T')[0];
-              const date = new Date(dateString);
-              // Adding timezone offset to avoid date changes
-              const userTimezoneOffset = date.getTimezoneOffset() * 60000;
-              return new Date(date.getTime() + userTimezoneOffset).toISOString().split('T')[0];
-            }
-            
-            // A simple way to generate unique IDs for the new claims.
-            // In a real app, this would be handled by a database.
-            const patientId = `pat_imported_${row["Patient"]?.replace(/\s/g, '_') || index}`;
+    try {
+      // Upload CSV to storage first
+      const timestamp = Date.now();
+      const filePath = `uploads/${timestamp}_${selectedFile.name}`;
 
+      const { error: uploadError } = await supabase.storage
+        .from('csv-uploads')
+        .upload(filePath, selectedFile);
 
-            return {
-              checkDate: parseDate(row["Check Date"]),
-              checkNumber: row["Check #"] || '',
-              npi: row["NPI"] || '',
-              payee: row["Payee"] || '',
-              payer: row["Payer"] || '',
-              rx: row["Rx"] || '',
-              serviceDate: parseDate(row["DOS"]),
-              cardholderId: row["Cardholder ID"] || '',
-              patientName: row["Patient"] || 'Unknown',
-              patientId: patientId, // Assign a temporary patientId
-              serviceDescription: row["Service"] || '',
-              productId: row["CPT/HCPCS Code"] || '',
-              amount: parseCurrency(row["Billed"]),
-              paid: parseCurrency(row["Paid"]),
-              adjustment: parseCurrency(row["Adjustment"]),
-              patientPay: parseCurrency(row["Patient Pay"]),
-              paymentStatus: row["Payment Status"] || 'PENDING',
-              postingStatus: row["Posting Status"] || 'Unposted',
-              workflow: row["Workflow"] || 'New',
-              notes: row["Notes"] || '',
-              statementSent: parseBooleanFlag(row["1st Statement Sent?"]),
-              statementSent2nd: parseBooleanFlag(row["2nd Statement Sent?"]),
-            };
-          });
+      if (uploadError) throw uploadError;
 
-          await addClaims(newClaims);
+      // Parse CSV with AI
+      const parsed = await parseCSVWithAI(selectedFile, openaiKey);
+      setParsedData(parsed);
 
-          setIsLoading(false);
-          toast({
-            title: "File Processed Successfully",
-            description: `Added ${newClaims.length} new claims. Redirecting to dashboard...`,
-            variant: "default",
-            className: "bg-accent text-accent-foreground"
-          });
-          
-          setSelectedFile(null);
-          const fileInput = document.getElementById('csv-upload') as HTMLInputElement;
-          if (fileInput) fileInput.value = '';
+      toast({
+        title: "AI Analysis Complete!",
+        description: `Successfully mapped ${parsed.mappedColumns.filter((c: any) => c.mappedName !== 'unmapped').length} columns and found ${parsed.totalRows} records.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "AI Analysis Failed",
+        description: error.message || "Failed to analyze CSV with AI",
+        variant: "destructive",
+      });
+      setStep('select');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-          // Redirect to the dashboard to see the new data
-          setTimeout(() => router.push('/dashboard'), 1500);
+  const handleImportData = async () => {
+    if (!parsedData) return;
 
-        } catch (error: any) {
-           setIsLoading(false);
-           toast({
-             title: "Error Processing Data",
-             description: `An error occurred while transforming the data: ${error.message}`,
-             variant: "destructive",
-           });
-        }
-      },
-      error: (error: any) => {
-        setIsLoading(false);
-        toast({
-          title: "Error Parsing File",
-          description: error.message,
-          variant: "destructive",
-        });
-      },
-    });
+    setIsLoading(true);
+    setStep('importing');
+
+    try {
+      // Transform parsed data to claim format
+      const claims = parsedData.rows.map((row: any) => transformToClaimData(row));
+
+      // Import to Supabase
+      await addClaims(claims);
+
+      toast({
+        title: "Import Successful!",
+        description: `Successfully imported ${claims.length} claims. Redirecting...`,
+      });
+
+      // Reset state
+      setSelectedFile(null);
+      setParsedData(null);
+      setStep('select');
+      const fileInput = document.getElementById('csv-upload') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+
+      // Redirect to dashboard
+      setTimeout(() => router.push('/dashboard'), 1500);
+    } catch (error: any) {
+      toast({
+        title: "Import Failed",
+        description: error.message || "Failed to import claims data",
+        variant: "destructive",
+      });
+      setStep('preview');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
-        title="Import Data"
-        description="Upload a CSV file to create new claims."
+        title="Import Claims Data"
+        description="Upload CSV files and let AI automatically map your columns to the correct fields."
       />
-      <Card className="border-white/60 bg-white/50">
-        <CardHeader className="space-y-3">
-          <CardTitle className="text-2xl text-slate-900">Upload claim data</CardTitle>
-          <CardDescription className="text-slate-600">
-            Select a CSV file containing the claim data. The columns must match the expected format. New claims will be added to the dashboard.
+
+      {/* Step 1: Upload File */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-indigo-500" />
+            AI-Powered CSV Import
+          </CardTitle>
+          <CardDescription>
+            Upload any CSV file format - our AI will automatically detect and map your columns.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="rounded-3xl border border-dashed border-white/60 bg-white/70 p-6 text-sm text-slate-600 shadow-inner">
-            <p className="font-semibold text-slate-800">Tips for perfect imports</p>
-            <ul className="mt-2 space-y-1 text-xs leading-5">
-              <li>• Ensure currency values omit special characters besides $ and commas.</li>
-              <li>• Include patient identifiers to keep statements flowing smoothly.</li>
-              <li>• We'll auto-detect dates and patient balances for you.</li>
-            </ul>
-          </div>
+        <CardContent>
           <Input
             id="csv-upload"
             type="file"
             accept=".csv"
             onChange={handleFileChange}
             disabled={isLoading}
-            className="rounded-2xl border border-white/60 bg-white/80"
+            className="cursor-pointer"
           />
+          {selectedFile && (
+            <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <p className="text-sm font-medium text-blue-900">
+                Selected: {selectedFile.name}
+              </p>
+              <p className="text-xs text-blue-700">
+                Size: {(selectedFile.size / 1024).toFixed(2)} KB
+              </p>
+            </div>
+          )}
         </CardContent>
-        <CardFooter className="flex items-center justify-end gap-3 border-t border-white/40 px-6 py-4">
-          <Button variant="outline" onClick={() => {
-            setSelectedFile(null);
-            const fileInput = document.getElementById('csv-upload') as HTMLInputElement;
-            if (fileInput) fileInput.value = '';
-          }} disabled={isLoading}>
-            Reset
-          </Button>
-          <Button onClick={handleProcessData} disabled={isLoading || !selectedFile}>
-            {isLoading ? "Processing..." : "Process data"}
+        <CardFooter className="border-t px-6 py-4">
+          <Button
+            onClick={handleAnalyzeWithAI}
+            disabled={isLoading || !selectedFile || step !== 'select'}
+            className="bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600"
+          >
+            {isLoading ? (
+              <>Analyzing with AI...</>
+            ) : (
+              <>
+                <Sparkles className="mr-2 h-4 w-4" />
+                Analyze with AI
+              </>
+            )}
           </Button>
         </CardFooter>
       </Card>
-    </>
+
+      {/* Step 2: Preview Mapping */}
+      {parsedData && step === 'preview' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Column Mapping Preview</CardTitle>
+            <CardDescription>
+              AI has automatically mapped your columns. Review and import when ready.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {parsedData.mappedColumns.map((col: any, idx: number) => (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between rounded-lg border p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    {col.mappedName !== 'unmapped' ? (
+                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <AlertCircle className="h-5 w-5 text-orange-500" />
+                    )}
+                    <div>
+                      <p className="font-medium">{col.originalName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {col.mappedName !== 'unmapped' ? (
+                          <>Maps to: <span className="font-mono">{col.mappedName}</span></>
+                        ) : (
+                          'Not mapped (will be skipped)'
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant={col.mappedName !== 'unmapped' ? 'default' : 'outline'}>
+                    {col.mappedName !== 'unmapped' ? 'Mapped' : 'Unmapped'}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 rounded-lg bg-slate-50 p-4">
+              <p className="text-sm font-medium text-slate-900">
+                Import Summary
+              </p>
+              <div className="mt-2 grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-slate-600">Total Rows</p>
+                  <p className="text-lg font-bold">{parsedData.totalRows}</p>
+                </div>
+                <div>
+                  <p className="text-slate-600">Mapped Columns</p>
+                  <p className="text-lg font-bold">
+                    {parsedData.mappedColumns.filter((c: any) => c.mappedName !== 'unmapped').length}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter className="border-t px-6 py-4 flex gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setParsedData(null);
+                setStep('select');
+              }}
+              disabled={isLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleImportData}
+              disabled={isLoading}
+              className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
+            >
+              {isLoading ? 'Importing...' : `Import ${parsedData.totalRows} Records`}
+            </Button>
+          </CardFooter>
+        </Card>
+      )}
+    </div>
   );
 }

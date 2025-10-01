@@ -2,81 +2,92 @@
 
 import React from 'react';
 import type { Claim } from '@/lib/types';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, doc, writeBatch } from 'firebase/firestore';
-import { updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+import { useCollection } from '@/lib/supabase/hooks';
+import { createClient } from '@/lib/supabase/client';
+import { mapClaimToDb, mapDbClaimToClaim } from '@/lib/mappers';
 
 export const useClaims = (initialClaims: Claim[] = []) => {
-  const firestore = useFirestore();
-  
-  const claimsCollection = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return collection(firestore, 'claims');
-  }, [firestore]);
+  const supabase = createClient();
+  const { data: rawClaims, isLoading, error } = useCollection<Record<string, any>>('claims', 'service_date', false);
 
-  const { data: claimsSnapshot, isLoading, error } = useCollection<Claim>(claimsCollection);
-  const claims = React.useMemo(() => claimsSnapshot ?? [], [claimsSnapshot]);
-
-  // Use initialClaims only when Firebase is not available
-  const effectiveClaims = React.useMemo<Claim[]>(() => {
-    if (firestore) {
-      return claims;
+  const claims = React.useMemo<Claim[]>(() => {
+    if (rawClaims && rawClaims.length) {
+      return rawClaims.map(mapDbClaimToClaim);
     }
-    return initialClaims ?? [];
-  }, [firestore, claims, initialClaims]);
+    return initialClaims;
+  }, [rawClaims, initialClaims]);
 
-  const addClaims = React.useCallback(async (newClaims: Omit<Claim, 'id'>[]) => {
-    if (!firestore) return;
-    
-    const batch = writeBatch(firestore);
-    const claimsCol = collection(firestore, 'claims');
+  const addClaims = React.useCallback(async (newClaims: Array<Partial<Claim> | Record<string, any>>) => {
+    try {
+      const payload = newClaims.map((claim) => {
+        if (claim && typeof claim === 'object' && 'total_charged_amount' in claim) {
+          const { id, ...rest } = claim as Record<string, any>;
+          return rest;
+        }
+        const { id, ...rest } = claim as Claim;
+        return mapClaimToDb(rest);
+      });
 
-    newClaims.forEach((claimData) => {
-      const docRef = doc(claimsCol);
-      batch.set(docRef, claimData);
-    });
+      const { error: insertError } = await supabase.from('claims').insert(payload);
+      if (insertError) {
+        throw insertError;
+      }
+    } catch (insertError) {
+      console.error('Error adding claims:', insertError);
+      throw insertError;
+    }
+  }, [supabase]);
+
+  const updateClaim = React.useCallback(async (updatedClaim: Claim) => {
+    const { id, ...claimData } = updatedClaim;
 
     try {
-      await batch.commit();
-    } catch (error) {
-      console.error("Error adding claims:", error);
-      throw error;
+      const { error: updateError } = await supabase
+        .from('claims')
+        .update(mapClaimToDb(claimData))
+        .eq('id', id);
+
+      if (updateError) {
+        throw updateError;
+      }
+    } catch (updateError) {
+      console.error('Error updating claim:', updateError);
+      throw updateError;
     }
-  }, [firestore]);
+  }, [supabase]);
 
-  const updateClaim = React.useCallback((updatedClaim: Claim) => {
-    if (!firestore) return;
-    
-    const { id, ...claimData } = updatedClaim;
-    const claimRef = doc(firestore, 'claims', id);
-    updateDocumentNonBlocking(claimRef, claimData);
-  }, [firestore]);
+  const removeClaims = React.useCallback(async (claimIds: string[]) => {
+    try {
+      const { error: deleteError } = await supabase
+        .from('claims')
+        .delete()
+        .in('id', claimIds);
 
-  const removeClaims = React.useCallback((claimIds: string[]) => {
-    if (!firestore) return;
-    
-    claimIds.forEach(id => {
-      const claimRef = doc(firestore, 'claims', id);
-      deleteDocumentNonBlocking(claimRef);
-    });
-  }, [firestore]);
+      if (deleteError) {
+        throw deleteError;
+      }
+    } catch (deleteError) {
+      console.error('Error removing claims:', deleteError);
+      throw deleteError;
+    }
+  }, [supabase]);
 
   const getClaimStatus = React.useCallback(
     (claimId: string | null) => {
       if (!claimId) return null;
-      const claim = effectiveClaims.find((c) => c.id === claimId);
-      return claim ? { statementSent: claim.statementSent } : null;
+      const claim = claims.find((c) => c.id === claimId);
+      return claim ? { statementMailed: claim.statementMailed } : null;
     },
-    [effectiveClaims]
+    [claims]
   );
 
   return {
-    claims: effectiveClaims,
-    isLoading: isLoading || !firestore,
+    claims,
+    isLoading,
     error,
     addClaims,
     updateClaim,
     removeClaims,
-    getClaimStatus
+    getClaimStatus,
   };
 };

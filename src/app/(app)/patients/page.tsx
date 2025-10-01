@@ -1,499 +1,546 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Activity, ArrowRight, CalendarClock, Filter, HeartPulse, Search, Users } from "lucide-react";
-
+import * as React from "react";
 import { PageHeader } from "@/components/page-header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
-import type { Claim, Patient } from "@/lib/types";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Separator } from "@/components/ui/separator";
+import { Progress } from "@/components/ui/progress";
 import { usePatients } from "@/hooks/use-patients";
 import { useClaims } from "@/hooks/use-claims";
+import type { Claim, Patient } from "@/lib/types";
+import { formatCurrency } from "@/lib/utils";
+import { Search, Activity, ClipboardList } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-const statusPalette: Record<string, string> = {
-  Clear: "bg-emerald-400/20 text-emerald-900",
-  "Needs Attention": "bg-amber-400/20 text-amber-900",
-  Critical: "bg-rose-400/20 text-rose-900",
-  Active: "bg-sky-400/20 text-sky-900",
-};
-
-type PatientDashboard = {
-  patient: Patient;
-  fullName: string;
-  outstandingBalance: number;
-  activeClaims: number;
-  lastServiceDate: string | null;
-  workflows: Record<string, number>;
-  paymentStatuses: Record<string, number>;
-  statusLabel: keyof typeof statusPalette;
-  timeline: Claim[];
-};
-
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(value);
-
-const formatDate = (value?: string | null, fallback = "No activity yet") => {
-  if (!value) return fallback;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return fallback;
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-};
-
-const determineStatus = (dashboard: PatientDashboard) => {
-  if (dashboard.outstandingBalance <= 0 && dashboard.activeClaims === 0) {
-    return "Clear" as const;
-  }
-
-  if (dashboard.workflows["Sent to Collections"]) {
-    return "Critical" as const;
-  }
-
-  if (
-    dashboard.outstandingBalance > 0 &&
-    (dashboard.workflows.Pending || dashboard.paymentStatuses.DENIED)
-  ) {
-    return "Needs Attention" as const;
-  }
-
-  return "Active" as const;
-};
-
-export default function PatientsPage() {
-  const { patients, isLoading: patientsLoading } = usePatients();
-  const { claims, isLoading: claimsLoading } = useClaims();
-
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "attention" | "clear" | "active">("all");
-  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
-
-  const dashboards = useMemo<PatientDashboard[]>(() => {
-    return patients.map((patient) => {
-      const patientClaims = (claims || []).filter((claim) => claim.patientId === patient.id);
-
-      const outstandingBalance = patientClaims.reduce((total, claim) => {
-        const amount = claim.patientPay ?? 0;
-        return !claim.statementSent ? total + amount : total;
-      }, 0);
-
-      const activeClaims = patientClaims.filter((claim) => !claim.statementSent).length;
-
-      const workflows = patientClaims.reduce<Record<string, number>>((acc, c) => {
-        acc[c.workflow] = (acc[c.workflow] || 0) + 1;
-        return acc;
-      }, {});
-
-      const paymentStatuses = patientClaims.reduce<Record<string, number>>((acc, c) => {
-        acc[c.paymentStatus] = (acc[c.paymentStatus] || 0) + 1;
-        return acc;
-      }, {});
-
-      const sortedTimeline = [...patientClaims].sort(
-        (a, b) => new Date(b.serviceDate).getTime() - new Date(a.serviceDate).getTime()
-      );
-
-      const fullName = [patient.firstName, patient.lastName]
-        .filter((part) => !!part)
-        .join(" ")
-        .trim();
-
-      const dashboard: PatientDashboard = {
-        patient,
-        fullName: fullName || patient.id || "Unnamed Patient",
-        outstandingBalance,
-        activeClaims,
-        lastServiceDate: sortedTimeline[0]?.serviceDate || null,
-        workflows,
-        paymentStatuses,
-        statusLabel: "Active",
-        timeline: sortedTimeline,
-      };
-
-      dashboard.statusLabel = determineStatus(dashboard);
-
-      return dashboard;
-    });
-  }, [patients, claims]);
-
-  const filteredDashboards = useMemo(() => {
-    const term = searchTerm.toLowerCase();
-    return dashboards
-      .filter((dashboard) => {
-        if (!term) return true;
-        const addressText = [
-          dashboard.patient.address?.street,
-          dashboard.patient.address?.city,
-          dashboard.patient.address?.state,
-          dashboard.patient.address?.zip,
-        ]
-          .filter((part) => !!part)
-          .join(" ")
-          .toLowerCase();
-
-        return (
-          dashboard.fullName.toLowerCase().includes(term) ||
-          dashboard.patient.id.toLowerCase().includes(term) ||
-          addressText.includes(term)
-        );
-      })
-      .filter((dashboard) => {
-        if (statusFilter === "all") return true;
-        if (statusFilter === "attention") {
-          return ["Needs Attention", "Critical"].includes(dashboard.statusLabel);
-        }
-        if (statusFilter === "clear") {
-          return dashboard.statusLabel === "Clear";
-        }
-        return dashboard.statusLabel === "Active";
-      });
-  }, [dashboards, searchTerm, statusFilter]);
-
-  useEffect(() => {
-    if (filteredDashboards.length === 0) {
-      setSelectedPatientId(null);
-      return;
-    }
-
-    if (!selectedPatientId || !filteredDashboards.some((d) => d.patient.id === selectedPatientId)) {
-      setSelectedPatientId(filteredDashboards[0]?.patient.id ?? null);
-    }
-  }, [filteredDashboards, selectedPatientId]);
-
-  const selectedDashboard = filteredDashboards.find((dashboard) => dashboard.patient.id === selectedPatientId);
-
-  const totalOutstanding = dashboards.reduce((total, item) => total + item.outstandingBalance, 0);
-  const totalActive = dashboards.filter((item) => item.statusLabel === "Active").length;
-  const attentionCount = dashboards.filter((item) => ["Needs Attention", "Critical"].includes(item.statusLabel)).length;
-
-  const isBusy = patientsLoading || claimsLoading;
-
-  return (
-    <>
-      <PageHeader
-        title="Patients"
-        description="Track balances, communication history, and claim workflows for every patient."
-      >
-        <Button variant="outline" className="hidden sm:flex">
-          <Filter className="mr-2 h-4 w-4" />
-          Smart Filters
-        </Button>
-      </PageHeader>
-
-      <div className="grid gap-6">
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Card className="bg-white/30 backdrop-blur-xl border-transparent shadow-xl">
-            <CardHeader className="pb-3">
-              <CardDescription className="flex items-center gap-2 text-indigo-900/80">
-                <Users className="h-4 w-4" />
-                Total patients
-              </CardDescription>
-              <CardTitle className="text-3xl font-bold text-slate-900">{dashboards.length}</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 text-sm text-slate-600">
-              Active records in your workspace.
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/30 backdrop-blur-xl border-transparent shadow-xl">
-            <CardHeader className="pb-3">
-              <CardDescription className="flex items-center gap-2 text-sky-900/80">
-                <Activity className="h-4 w-4" />
-                Outstanding balance
-              </CardDescription>
-              <CardTitle className="text-3xl font-bold text-slate-900">
-                {formatCurrency(totalOutstanding)}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 text-sm text-slate-600">
-              Open patient responsibility remaining.
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/30 backdrop-blur-xl border-transparent shadow-xl">
-            <CardHeader className="pb-3">
-              <CardDescription className="flex items-center gap-2 text-cyan-900/80">
-                <HeartPulse className="h-4 w-4" />
-                Active follow-ups
-              </CardDescription>
-              <CardTitle className="text-3xl font-bold text-slate-900">{totalActive}</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 text-sm text-slate-600">
-              Patients with open workflows today.
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/30 backdrop-blur-xl border-transparent shadow-xl">
-            <CardHeader className="pb-3">
-              <CardDescription className="flex items-center gap-2 text-rose-900/80">
-                <CalendarClock className="h-4 w-4" />
-                Needs attention
-              </CardDescription>
-              <CardTitle className="text-3xl font-bold text-slate-900">{attentionCount}</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 text-sm text-slate-600">
-              Accounts ready for outreach or escalation.
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-          <Card className="overflow-hidden border-white/40 bg-white/30 shadow-2xl backdrop-blur-xl">
-            <CardHeader className="space-y-4">
-              <div className="rounded-2xl border border-white/60 bg-white/60 px-4 py-3 shadow-inner">
-                <div className="flex items-center gap-3">
-                  <Search className="h-4 w-4 text-slate-500" />
-                  <Input
-                    value={searchTerm}
-                    onChange={(event) => setSearchTerm(event.target.value)}
-                    placeholder="Search by name or ID"
-                    className="border-0 bg-transparent p-0 focus-visible:ring-0"
-                  />
-                </div>
-              </div>
-              <Tabs
-                value={statusFilter}
-                onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}
-              >
-                <TabsList className="grid grid-cols-4 gap-2 rounded-2xl bg-white/70 p-1 text-xs font-semibold text-slate-600">
-                  <TabsTrigger value="all">All</TabsTrigger>
-                  <TabsTrigger value="active">Active</TabsTrigger>
-                  <TabsTrigger value="attention">Attention</TabsTrigger>
-                  <TabsTrigger value="clear">Clear</TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <ScrollArea className="h-[540px] pr-4">
-                <div className="space-y-3">
-                  {isBusy && (
-                    <div className="rounded-2xl border border-dashed border-slate-300/60 bg-white/40 p-6 text-center text-sm text-slate-500">
-                      Loading patient insights...
-                    </div>
-                  )}
-                  {!isBusy && filteredDashboards.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-slate-300/60 bg-white/40 p-6 text-center text-sm text-slate-500">
-                      No patients match your filters yet.
-                    </div>
-                  )}
-                  {filteredDashboards.map((dashboard) => (
-                    <button
-                      key={dashboard.patient.id}
-                      type="button"
-                      onClick={() => setSelectedPatientId(dashboard.patient.id)}
-                      className={cn(
-                        "group w-full rounded-3xl border px-5 py-4 text-left transition-all",
-                        "bg-white/60 shadow hover:shadow-xl hover:-translate-y-1",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400",
-                        selectedPatientId === dashboard.patient.id
-                          ? "border-transparent bg-gradient-to-r from-indigo-400/30 via-sky-400/30 to-teal-300/30 shadow-xl"
-                          : "border-white/70"
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <h3 className="text-lg font-semibold text-slate-900">
-                            {dashboard.fullName || "Unnamed Patient"}
-                          </h3>
-                          <p className="text-xs uppercase tracking-wide text-slate-500">
-                            ID: {dashboard.patient.id}
-                          </p>
-                        </div>
-                        <Badge
-                          className={cn(
-                            "rounded-full px-3 py-1 text-xs font-semibold backdrop-blur",
-                            statusPalette[dashboard.statusLabel]
-                          )}
-                        >
-                          {dashboard.statusLabel}
-                        </Badge>
-                      </div>
-                      <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-600">
-                        <span className="font-semibold text-slate-900">
-                          {formatCurrency(dashboard.outstandingBalance)} due
-                        </span>
-                        <span className="h-1 w-1 rounded-full bg-slate-300" />
-                        <span>{dashboard.activeClaims} open claims</span>
-                        {dashboard.lastServiceDate && (
-                          <>
-                            <span className="h-1 w-1 rounded-full bg-slate-300" />
-                            <span>Last DOS {formatDate(dashboard.lastServiceDate)}</span>
-                          </>
-                        )}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-
-          <Card className="border-white/40 bg-white/30 shadow-2xl backdrop-blur-xl">
-            <CardHeader className="space-y-2">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <CardDescription className="text-slate-500">Patient overview</CardDescription>
-                  <CardTitle className="text-3xl font-semibold text-slate-900">
-                    {selectedDashboard?.fullName || "Select a patient"}
-                  </CardTitle>
-                </div>
-                {selectedDashboard && (
-                  <Badge
-                    className={cn(
-                      "rounded-full px-3 py-1 text-xs font-semibold backdrop-blur",
-                      statusPalette[selectedDashboard.statusLabel]
-                    )}
-                  >
-                    {selectedDashboard.statusLabel}
-                  </Badge>
-                )}
-              </div>
-              {selectedDashboard && (
-                <p className="text-sm text-slate-600">
-                  Last activity {formatDate(selectedDashboard.lastServiceDate)}
-                </p>
-              )}
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {!selectedDashboard && (
-                <div className="rounded-3xl border border-dashed border-slate-300/60 bg-white/60 p-10 text-center text-slate-500">
-                  Choose a patient on the left to see their account snapshot.
-                </div>
-              )}
-
-              {selectedDashboard && (
-                <div className="space-y-6">
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    <div className="rounded-3xl border border-white/60 bg-gradient-to-br from-indigo-400/20 via-sky-400/20 to-teal-300/20 p-4 text-slate-800 shadow">
-                      <p className="text-xs uppercase tracking-wide text-slate-600">Outstanding</p>
-                      <p className="mt-2 text-2xl font-semibold">
-                        {formatCurrency(selectedDashboard.outstandingBalance)}
-                      </p>
-                    </div>
-                    <div className="rounded-3xl border border-white/60 bg-white/70 p-4 text-slate-800 shadow">
-                      <p className="text-xs uppercase tracking-wide text-slate-600">Open claims</p>
-                      <p className="mt-2 text-2xl font-semibold">{selectedDashboard.activeClaims}</p>
-                    </div>
-                    <div className="rounded-3xl border border-white/60 bg-white/70 p-4 text-slate-800 shadow">
-                      <p className="text-xs uppercase tracking-wide text-slate-600">Payment mix</p>
-                      <p className="mt-2 text-sm leading-5 text-slate-600">
-                        {Object.entries(selectedDashboard.paymentStatuses)
-                          .map(([status, count]) => `${status}: ${count}`)
-                          .join(" · ") || "Awaiting payments"}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="rounded-3xl border border-white/60 bg-white/70 p-6 shadow">
-                    <h3 className="text-lg font-semibold text-slate-900">Contact & status</h3>
-                    <div className="mt-4 grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
-                      <div>
-                        <p className="text-xs uppercase tracking-wide text-slate-500">Address</p>
-                        <p className="mt-1 whitespace-pre-line">
-                          {
-                            selectedDashboard.patient.address?.street ||
-                            "No address on file"
-                          }
-                          {(() => {
-                            const secondaryLine = [
-                              selectedDashboard.patient.address?.city,
-                              selectedDashboard.patient.address?.state,
-                              selectedDashboard.patient.address?.zip,
-                            ]
-                              .filter((part) => !!part)
-                              .join(", ");
-
-                            return secondaryLine
-                              ? `\n${secondaryLine}`
-                              : "";
-                          })()}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-wide text-slate-500">DOB</p>
-                        <p className="mt-1">
-                          {formatDate(selectedDashboard.patient.dateOfBirth, "Not provided")}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-wide text-slate-500">Workflow mix</p>
-                        <div className="mt-1 flex flex-wrap gap-2">
-                          {Object.entries(selectedDashboard.workflows).map(([workflow, count]) => (
-                            <Badge
-                              key={workflow}
-                              variant="secondary"
-                              className="rounded-full bg-gradient-to-r from-sky-400/40 via-cyan-400/40 to-teal-300/40 text-slate-700"
-                            >
-                              {workflow} · {count}
-                            </Badge>
-                          ))}
-                          {Object.keys(selectedDashboard.workflows).length === 0 && (
-                            <span className="text-slate-500">No workflows yet</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-3xl border border-white/60 bg-white/70 p-6 shadow">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold text-slate-900">History & timeline</h3>
-                      <Button variant="ghost" size="sm" className="text-sky-600">
-                        Detailed view
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </Button>
-                    </div>
-                    <div className="mt-6 space-y-5">
-                      {selectedDashboard.timeline.slice(0, 6).map((claim) => (
-                        <div
-                          key={claim.id}
-                          className="relative rounded-2xl border border-transparent bg-white/80 p-4 shadow-sm transition-all hover:-translate-y-1 hover:border-sky-200 hover:shadow-lg"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
-                            <div>
-                              <p className="font-semibold text-slate-900">
-                                {claim.serviceDescription || "Service"}
-                              </p>
-                              <p className="text-xs uppercase tracking-wide text-slate-500">
-                                DOS {formatDate(claim.serviceDate)} · Rx {claim.rx || "—"}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <p className="font-semibold text-slate-900">
-                                {formatCurrency(claim.patientPay ?? 0)}
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                {claim.paymentStatus} · {claim.workflow}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                      {selectedDashboard.timeline.length === 0 && (
-                        <div className="rounded-2xl border border-dashed border-slate-300/60 bg-white/60 p-6 text-center text-sm text-slate-500">
-                          No claim history yet.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </>
-  );
+function formatDisplayDate(value?: string | null) {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function getPatientName(patient: Patient) {
+    return `${patient.firstName} ${patient.lastName}`.trim();
+}
 
+type PatientSummary = {
+    claims: Claim[];
+    outstanding: number;
+    needed: number;
+    sent: number;
+    total: number;
+    totalPaid: number;
+    lastServiceDate: string | null;
+    lastUpdate: string | null;
+};
+
+const filterOptions = [
+    { value: "all", label: "All" },
+    { value: "active", label: "Active" },
+    { value: "needs-action", label: "Needs Action" },
+    { value: "collections", label: "Collections" },
+];
+
+export default function PatientsPage() {
+    const { patients, isLoading: patientsLoading } = usePatients();
+    const { claims, isLoading: claimsLoading } = useClaims();
+
+    const [searchTerm, setSearchTerm] = React.useState("");
+    const [statusFilter, setStatusFilter] = React.useState<(typeof filterOptions)[number]["value"]>("all");
+    const [selectedPatientId, setSelectedPatientId] = React.useState<string | null>(null);
+    const [activeTab, setActiveTab] = React.useState("overview");
+
+    const summaries = React.useMemo(() => {
+        const map = new Map<string, PatientSummary>();
+        (claims ?? []).forEach((claim) => {
+            if (!claim.patientId) return;
+            const current = map.get(claim.patientId) ?? {
+                claims: [],
+                outstanding: 0,
+                needed: 0,
+                sent: 0,
+                total: 0,
+                totalPaid: 0,
+                lastServiceDate: null as string | null,
+                lastUpdate: null as string | null,
+            };
+
+            current.claims.push(claim);
+            current.total += 1;
+            current.totalPaid += claim.paid ?? 0;
+            const patientPayValue = claim.patientPay ?? 0;
+            if (!claim.statementSent) {
+                current.outstanding += patientPayValue;
+                current.needed += 1;
+            } else {
+                current.sent += 1;
+            }
+
+            if (claim.serviceDate) {
+                const date = new Date(claim.serviceDate).toISOString();
+                if (!current.lastServiceDate || date > current.lastServiceDate) {
+                    current.lastServiceDate = date;
+                }
+            }
+
+            const possibleUpdate = claim.statementSent2ndAt ?? claim.statementSentAt ?? claim.checkDate;
+            if (possibleUpdate) {
+                const normalized = new Date(possibleUpdate).toISOString();
+                if (!current.lastUpdate || normalized > current.lastUpdate) {
+                    current.lastUpdate = normalized;
+                }
+            }
+
+            map.set(claim.patientId, current);
+        });
+        return map;
+    }, [claims]);
+
+    const filteredPatients = React.useMemo(() => {
+        const normalizedSearch = searchTerm.trim().toLowerCase();
+
+        return (patients ?? []).filter((patient) => {
+            const summary = summaries.get(patient.id);
+
+            if (statusFilter === "active" && patient.status && patient.status !== "Active") {
+                return false;
+            }
+            if (statusFilter === "needs-action" && (!summary || summary.outstanding <= 0)) {
+                return false;
+            }
+            if (statusFilter === "collections" && patient.status !== "Collections") {
+                return false;
+            }
+
+            if (!normalizedSearch) {
+                return true;
+            }
+
+            const haystack = [
+                patient.firstName,
+                patient.lastName,
+                patient.address?.city,
+                patient.address?.state,
+                patient.address?.street,
+            ]
+                .filter(Boolean)
+                .join(" ")
+                .toLowerCase();
+
+            return haystack.includes(normalizedSearch);
+        });
+    }, [patients, searchTerm, statusFilter, summaries]);
+
+    React.useEffect(() => {
+        if (!selectedPatientId && filteredPatients.length) {
+            setSelectedPatientId(filteredPatients[0].id);
+        }
+    }, [filteredPatients, selectedPatientId]);
+
+    React.useEffect(() => {
+        if (selectedPatientId && !filteredPatients.some((patient) => patient.id === selectedPatientId)) {
+            setSelectedPatientId(filteredPatients[0]?.id ?? null);
+        }
+    }, [filteredPatients, selectedPatientId]);
+
+    const selectedPatient = React.useMemo(
+        () => filteredPatients.find((patient) => patient.id === selectedPatientId) ?? filteredPatients[0] ?? null,
+        [filteredPatients, selectedPatientId]
+    );
+
+    const selectedSummary = selectedPatient ? summaries.get(selectedPatient.id) ?? {
+        claims: [],
+        outstanding: 0,
+        needed: 0,
+        sent: 0,
+        total: 0,
+        totalPaid: 0,
+        lastServiceDate: null,
+        lastUpdate: null,
+    } : null;
+
+    const dashboardTotals = React.useMemo(() => {
+        const base = { patients: filteredPatients.length, outstanding: 0, statements: 0, collected: 0 };
+        filteredPatients.forEach((patient) => {
+            const summary = summaries.get(patient.id);
+            if (!summary) return;
+            base.outstanding += summary.outstanding;
+            base.statements += summary.needed;
+            base.collected += summary.totalPaid;
+        });
+        return base;
+    }, [filteredPatients, summaries]);
+
+    const isLoading = patientsLoading || claimsLoading;
+
+    return (
+        <div className="space-y-8">
+            <PageHeader
+                title="Patient Navigator"
+                description="Search, filter, and drill into individual patients to understand balances, activity, and statement history."
+            />
+
+            <div className="grid gap-6 lg:grid-cols-[340px,1fr]">
+                <div className="space-y-4">
+                    <Card className="border-none bg-white/70 p-[1px] shadow-xl shadow-sky-200/50">
+                        <div className="rounded-3xl bg-gradient-to-br from-white/90 via-white/80 to-white/60">
+                            <CardHeader className="space-y-3 border-b border-white/60">
+                                <CardTitle className="flex items-center gap-2 text-lg font-semibold text-slate-700">
+                                    <Search className="h-5 w-5 text-sky-500" /> Patient List
+                                </CardTitle>
+                                <div className="flex flex-col gap-3">
+                                    <Input
+                                        value={searchTerm}
+                                        onChange={(event) => setSearchTerm(event.target.value)}
+                                        placeholder="Search by name, city, or ID"
+                                        className="h-11 rounded-2xl border-none bg-white/80 px-4 text-sm shadow-inner"
+                                    />
+                                     <Select
+                                        value={statusFilter}
+                                        onValueChange={(value) => setStatusFilter(value as (typeof filterOptions)[number]["value"])}
+                                    >
+                                        <SelectTrigger className="h-11 rounded-2xl border-none bg-white/80 px-4 text-sm shadow-inner">
+                                            <SelectValue placeholder="Filter by status..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {filterOptions.map((option) => (
+                                                <SelectItem key={option.value} value={option.value}>
+                                                    {option.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="px-0 py-0">
+                                <ScrollArea className="h-[520px] px-4">
+                                    <div className="space-y-3 py-4">
+                                        {isLoading && (
+                                            <div className="rounded-2xl border border-dashed border-slate-200/80 bg-white/70 p-6 text-center text-sm text-slate-500">
+                                                Loading patients...
+                                            </div>
+                                        )}
+                                        {!isLoading && filteredPatients.length === 0 && (
+                                            <div className="rounded-2xl border border-dashed border-slate-200/80 bg-white/70 p-6 text-center text-sm text-slate-500">
+                                                No patients match your filters right now.
+                                            </div>
+                                        )}
+                                        {!isLoading &&
+                                            filteredPatients.map((patient) => {
+                                                const summary = summaries.get(patient.id);
+                                                const isActive = selectedPatient && patient.id === selectedPatient.id;
+                                                const outstanding = summary?.outstanding ?? 0;
+                                                const lastVisit = summary?.lastServiceDate ?? patient.lastVisitAt;
+
+                                                return (
+                                                    <button
+                                                        key={patient.id}
+                                                        onClick={() => {
+                                                            setSelectedPatientId(patient.id);
+                                                            setActiveTab("overview");
+                                                        }}
+                                                        className={`w-full rounded-3xl border p-4 text-left transition hover:shadow-lg ${
+                                                                isActive
+                                                                ? "border-transparent bg-gradient-to-r from-indigo-400/90 via-sky-400/90 to-teal-400/90 text-white shadow-xl"
+                                                                : "border-white/60 bg-white/70 text-slate-600 hover:bg-white"
+                                                            }`}
+                                                    >
+                                                        <div className="flex items-start justify-between gap-3">
+                                                            <div>
+                                                                <p className={`text-base font-semibold ${isActive ? "text-white" : "text-slate-700"}`}>
+                                                                    {getPatientName(patient)}
+                                                                </p>
+                                                                <p className={`text-xs ${isActive ? "text-white/80" : "text-slate-500"}`}>
+                                                                    {patient.address?.city}, {patient.address?.state}
+                                                                </p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className={`text-sm font-semibold ${isActive ? "text-white" : "text-slate-700"}`}>
+                                                                    {formatCurrency(outstanding)}
+                                                                </p>
+                                                                <p className={`text-[11px] uppercase tracking-wide ${isActive ? "text-white/80" : "text-slate-400"}`}>
+                                                                    Outstanding
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                                                            {patient.status && (
+                                                                <Badge variant={isActive ? "secondary" : "outline"}>{patient.status}</Badge>
+                                                            )}
+                                                            {summary && summary.needed > 0 && (
+                                                                <Badge variant="destructive">{summary.needed} statements due</Badge>
+                                                            )}
+                                                            {lastVisit && (
+                                                                <Badge variant="outline" className={isActive ? "border-white/50 text-white" : "text-slate-500"}>
+                                                                    Last DOS {formatDisplayDate(lastVisit)}
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                    </div>
+                                </ScrollArea>
+                            </CardContent>
+                        </div>
+                    </Card>
+
+                    <Card className="border-none bg-white/70 p-[1px] shadow-xl shadow-sky-200/50">
+                        <div className="rounded-3xl bg-gradient-to-br from-white/90 via-white/80 to-white/60">
+                            <CardHeader className="border-b border-white/60 pb-4">
+                                <CardTitle className="flex items-center gap-2 text-lg font-semibold text-slate-700">
+                                    <Activity className="h-5 w-5 text-teal-500" /> Patient Metrics
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="grid gap-4 p-6">
+                                <div className="grid gap-4 sm:grid-cols-2">
+                                    <div className="rounded-3xl border border-white/60 bg-white/80 p-4 shadow-inner">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Patients</p>
+                                        <p className="mt-2 text-2xl font-semibold text-slate-700">{dashboardTotals.patients}</p>
+                                        <p className="text-xs text-slate-500">Currently visible</p>
+                                    </div>
+                                    <div className="rounded-3xl border border-white/60 bg-white/80 p-4 shadow-inner">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Outstanding</p>
+                                        <p className="mt-2 text-2xl font-semibold text-slate-700">{formatCurrency(dashboardTotals.outstanding)}</p>
+                                        <p className="text-xs text-slate-500">Across filtered patients</p>
+                                    </div>
+                                    <div className="rounded-3xl border border-white/60 bg-white/80 p-4 shadow-inner">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Statements Due</p>
+                                        <p className="mt-2 text-2xl font-semibold text-slate-700">{dashboardTotals.statements}</p>
+                                        <p className="text-xs text-slate-500">Waiting to be sent</p>
+                                    </div>
+                                    <div className="rounded-3xl border border-white/60 bg-white/80 p-4 shadow-inner">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Insurance Paid</p>
+                                        <p className="mt-2 text-2xl font-semibold text-slate-700">{formatCurrency(dashboardTotals.collected)}</p>
+                                        <p className="text-xs text-slate-500">Recorded payments</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </div>
+                    </Card>
+                </div>
+
+                <div className="space-y-6">
+                    <Card className="border-none bg-white/70 p-[1px] shadow-2xl shadow-sky-200/60">
+                        <div className="rounded-3xl bg-gradient-to-br from-white/90 via-white/80 to-white/60">
+                            <CardHeader className="border-b border-white/60 pb-4">
+                                <CardTitle className="flex items-center justify-between text-lg font-semibold text-slate-700">
+                                    <span>Patient Overview</span>
+                                    {selectedPatient && (
+                                        <Badge variant="outline" className="rounded-full border-sky-200 text-sky-600">
+                                            {selectedPatient.status ?? "Status Pending"}
+                                        </Badge>
+                                    )}
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-6 p-6">
+                                {!selectedPatient && (
+                                    <div className="rounded-3xl border border-dashed border-slate-200/80 bg-white/70 p-6 text-center text-sm text-slate-500">
+                                        Select a patient from the list to view their full history.
+                                    </div>
+                                )}
+
+                                {selectedPatient && selectedSummary && (
+                                    <div className="space-y-6">
+                                        <div className="grid gap-6 lg:grid-cols-2">
+                                            <div className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-inner">
+                                                <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Contact</h3>
+                                                <p className="mt-2 text-lg font-semibold text-slate-700">{getPatientName(selectedPatient)}</p>
+                                                <p className="text-sm text-slate-500">
+                                                    {selectedPatient.address?.street}
+                                                    <br />
+                                                    {selectedPatient.address?.city}, {selectedPatient.address?.state} {selectedPatient.address?.zip}
+                                                </p>
+                                                <div className="mt-3 space-y-1 text-sm text-slate-500">
+                                                    {selectedPatient.phone && <p>{selectedPatient.phone}</p>}
+                                                    {selectedPatient.email && <p>{selectedPatient.email}</p>}
+                                                    <p>DOB: {formatDisplayDate(selectedPatient.dateOfBirth)}</p>
+                                                </div>
+                                            </div>
+                                            <div className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-inner">
+                                                <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Statement Health</h3>
+                                                <div className="mt-4 space-y-4">
+                                                    <div>
+                                                        <div className="flex items-center justify-between text-sm">
+                                                            <span className="text-slate-500">Progress</span>
+                                                            <span className="font-semibold text-slate-700">
+                                                                {selectedSummary.sent}/{selectedSummary.total}
+                                                            </span>
+                                                        </div>
+                                                        <Progress value={selectedSummary.total ? (selectedSummary.sent / selectedSummary.total) * 100 : 0} className="mt-2 h-2 rounded-full bg-slate-200/70" />
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-3 text-sm">
+                                                        <div className="rounded-2xl border border-white/60 bg-white/70 p-3 text-center">
+                                                            <p className="text-xs uppercase tracking-wide text-slate-500">Outstanding</p>
+                                                            <p className="mt-1 text-base font-semibold text-slate-700">{formatCurrency(selectedSummary.outstanding)}</p>
+                                                        </div>
+                                                        <div className="rounded-2xl border border-white/60 bg-white/70 p-3 text-center">
+                                                            <p className="text-xs uppercase tracking-wide text-slate-500">Insurance Paid</p>
+                                                            <p className="mt-1 text-base font-semibold text-slate-700">{formatCurrency(selectedSummary.totalPaid)}</p>
+                                                        </div>
+                                                        <div className="rounded-2xl border border-white/60 bg-white/70 p-3 text-center">
+                                                            <p className="text-xs uppercase tracking-wide text-slate-500">Statements Needed</p>
+                                                            <p className="mt-1 text-base font-semibold text-slate-700">{selectedSummary.needed}</p>
+                                                        </div>
+                                                        <div className="rounded-2xl border border-white/60 bg-white/70 p-3 text-center">
+                                                            <p className="text-xs uppercase tracking-wide text-slate-500">Last DOS</p>
+                                                            <p className="mt-1 text-base font-semibold text-slate-700">{formatDisplayDate(selectedSummary.lastServiceDate)}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <Tabs value={activeTab} onValueChange={setActiveTab}>
+                                            <TabsList className="mb-4 rounded-2xl bg-slate-100/60 p-[2px]">
+                                                <TabsTrigger
+                                                    value="overview"
+                                                    className="rounded-2xl px-4 py-2 text-sm font-semibold text-slate-500 data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-400 data-[state=active]:to-sky-400 data-[state=active]:text-white"
+                                                >
+                                                    Dashboard
+                                                </TabsTrigger>
+                                                <TabsTrigger
+                                                    value="history"
+                                                    className="rounded-2xl px-4 py-2 text-sm font-semibold text-slate-500 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-400 data-[state=active]:to-teal-400 data-[state=active]:text-white"
+                                                >
+                                                    Claim History
+                                                </TabsTrigger>
+                                                <TabsTrigger
+                                                    value="timeline"
+                                                    className="rounded-2xl px-4 py-2 text-sm font-semibold text-slate-500 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-400 data-[state=active]:to-cyan-400 data-[state=active]:text-white"
+                                                >
+                                                    Timeline
+                                                </TabsTrigger>
+                                            </TabsList>
+
+                                            <TabsContent value="overview" className="space-y-4">
+                                                <div className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-inner">
+                                                    <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
+                                                        <ClipboardList className="h-4 w-4 text-sky-500" /> Summary
+                                                    </h3>
+                                                    <Separator className="my-4 bg-slate-200/70" />
+                                                    <div className="grid gap-4 sm:grid-cols-2">
+                                                        <div className="rounded-2xl border border-white/60 bg-white/70 p-4">
+                                                            <p className="text-xs uppercase tracking-wide text-slate-500">Total Claims</p>
+                                                            <p className="mt-1 text-2xl font-semibold text-slate-700">{selectedSummary.total}</p>
+                                                            <p className="text-xs text-slate-500">Lifetime in system</p>
+                                                        </div>
+                                                        <div className="rounded-2xl border border-white/60 bg-white/70 p-4">
+                                                            <p className="text-xs uppercase tracking-wide text-slate-500">Last Update</p>
+                                                            <p className="mt-1 text-2xl font-semibold text-slate-700">{formatDisplayDate(selectedSummary.lastUpdate)}</p>
+                                                            <p className="text-xs text-slate-500">Most recent activity</p>
+                                                        </div>
+                                                        <div className="rounded-2xl border border-white/60 bg-white/70 p-4">
+                                                            <p className="text-xs uppercase tracking-wide text-slate-500">Sent Statements</p>
+                                                            <p className="mt-1 text-2xl font-semibold text-slate-700">{selectedSummary.sent}</p>
+                                                            <p className="text-xs text-slate-500">Marked as delivered</p>
+                                                        </div>
+                                                        <div className="rounded-2xl border border-white/60 bg-white/70 p-4">
+                                                            <p className="text-xs uppercase tracking-wide text-slate-500">Pending Statements</p>
+                                                            <p className="mt-1 text-2xl font-semibold text-slate-700">{selectedSummary.needed}</p>
+                                                            <p className="text-xs text-slate-500">Ready for generation</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </TabsContent>
+
+                                            <TabsContent value="history" className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-inner">
+                                                {selectedSummary.claims.length === 0 ? (
+                                                    <p className="text-sm text-slate-500">No claims recorded for this patient yet.</p>
+                                                ) : (
+                                                    <div className="overflow-x-auto">
+                                                        <Table>
+                                                            <TableHeader>
+                                                                <TableRow className="bg-white/70">
+                                                                    <TableHead>DOS</TableHead>
+                                                                    <TableHead>Service</TableHead>
+                                                                    <TableHead className="text-right">Billed</TableHead>
+                                                                    <TableHead className="text-right">Paid</TableHead>
+                                                                    <TableHead className="text-right">Patient Pay</TableHead>
+                                                                    <TableHead>Status</TableHead>
+                                                                    <TableHead>Workflow</TableHead>
+                                                                </TableRow>
+                                                            </TableHeader>
+                                                            <TableBody>
+                                                                {[...selectedSummary.claims]
+                                                                    .sort((a, b) => (b.serviceDate ?? "").localeCompare(a.serviceDate ?? ""))
+                                                                    .map((claim) => (
+                                                                        <TableRow key={claim.id} className="transition hover:bg-sky-50/70">
+                                                                            <TableCell>{formatDisplayDate(claim.serviceDate)}</TableCell>
+                                                                            <TableCell>
+                                                                                <p className="font-medium text-slate-700">{claim.serviceDescription || "Service"}</p>
+                                                                                <p className="text-xs text-slate-500">Rx {claim.rx}</p>
+                                                                            </TableCell>
+                                                                            <TableCell className="text-right">{formatCurrency(claim.amount)}</TableCell>
+                                                                            <TableCell className="text-right">{formatCurrency(claim.paid)}</TableCell>
+                                                                            <TableCell className="text-right">{formatCurrency(claim.patientPay)}</TableCell>
+                                                                            <TableCell>
+                                                                                <Badge variant={claim.statementSent ? "outline" : "destructive"}>
+                                                                                    {claim.statementSent ? "Sent" : "Pending"}
+                                                                                </Badge>
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <Badge variant="secondary">{claim.workflow}</Badge>
+                                                                            </TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                            </TableBody>
+                                                        </Table>
+                                                    </div>
+                                                )}
+                                            </TabsContent>
+
+                                            <TabsContent value="timeline" className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-inner">
+                                                <div className="space-y-4">
+                                                    {selectedSummary.claims.length === 0 ? (
+                                                        <p className="text-sm text-slate-500">No events recorded yet.</p>
+                                                    ) : (
+                                                        [...selectedSummary.claims]
+                                                            .sort((a, b) => (a.serviceDate ?? "").localeCompare(b.serviceDate ?? ""))
+                                                            .map((claim) => (
+                                                                <div key={claim.id} className="flex gap-4">
+                                                                    <div className="relative flex flex-col items-center">
+                                                                        <div className="mt-1 h-4 w-4 rounded-full bg-gradient-to-br from-sky-400 to-teal-400 shadow-lg" />
+                                                                        <div className="mt-1 h-full w-[2px] bg-slate-200" />
+                                                                    </div>
+                                                                    <div className="flex-1 rounded-2xl border border-white/60 bg-white/70 p-4 shadow-sm">
+                                                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                                                            <div>
+                                                                                <p className="text-sm font-semibold text-slate-700">{formatDisplayDate(claim.serviceDate)}</p>
+                                                                                <p className="text-xs uppercase tracking-wide text-slate-400">Service Date</p>
+                                                                            </div>
+                                                                            <Badge variant={claim.statementSent ? "outline" : "secondary"}>
+                                                                                {claim.statementSent ? "Statement Sent" : "Needs Statement"}
+                                                                            </Badge>
+                                                                        </div>
+                                                                        <p className="mt-3 text-sm text-slate-600">
+                                                                            {claim.serviceDescription || "Service"} · {claim.productId || claim.rx}
+                                                                        </p>
+                                                                        <div className="mt-3 grid gap-2 text-xs text-slate-500 sm:grid-cols-3">
+                                                                            <p>Billed: {formatCurrency(claim.amount)}</p>
+                                                                            <p>Paid: {formatCurrency(claim.paid)}</p>
+                                                                            <p>Patient: {formatCurrency(claim.patientPay)}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            ))
+                                                    )}
+                                                </div>
+                                            </TabsContent>
+                                        </Tabs>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </div>
+                    </Card>
+                </div>
+            </div>
+        </div>
+    );
+}
+    

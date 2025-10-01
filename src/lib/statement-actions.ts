@@ -1,22 +1,13 @@
 "use client";
 
-import { doc, writeBatch } from "firebase/firestore";
-import type { Firestore } from "firebase/firestore";
+import { createClient } from "@/lib/supabase/client";
 
 type StatementMarkingOptions = {
   statement?: "first" | "second";
   markedAt?: Date;
 };
 
-/**
- * Marks the provided claim documents as having a patient statement sent.
- *
- * The update happens in a Firestore batch so that either all claim documents
- * are updated or none of them are. By default we mark the first statement as
- * sent, but callers can opt-in to marking the second statement instead.
- */
 export async function markClaimsStatementStatus(
-  firestore: Firestore,
   claimIds: string[],
   options: StatementMarkingOptions = {}
 ) {
@@ -26,23 +17,27 @@ export async function markClaimsStatementStatus(
 
   const { statement = "first", markedAt = new Date() } = options;
   const timestamp = markedAt.toISOString();
+  const supabase = createClient();
 
-  const batch = writeBatch(firestore);
-
-  claimIds.forEach((claimId) => {
-    const claimRef = doc(firestore, "claims", claimId);
+  const updates = claimIds.map((claimId) => {
     if (statement === "second") {
-      batch.update(claimRef, {
-        statementSent2nd: true,
-        statementSent2ndAt: timestamp,
-      });
-    } else {
-      batch.update(claimRef, {
-        statementSent: true,
-        statementSentAt: timestamp,
-      });
+      return supabase
+        .from("claims")
+        .update({
+          statement_two_mailed: true,
+          statement_sent_2nd_at: timestamp,
+        })
+        .eq("id", claimId);
     }
+
+    return supabase
+      .from("claims")
+      .update({
+        statement_mailed: true,
+        statement_sent_at: timestamp,
+      })
+      .eq("id", claimId);
   });
 
-  await batch.commit();
+  await Promise.all(updates);
 }
